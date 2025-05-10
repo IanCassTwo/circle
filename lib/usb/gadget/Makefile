@@ -28,6 +28,7 @@ ifneq ($(strip $(RASPPI)),5)
 OBJS	= dwusbgadget.o dwusbgadgetendpoint.o dwusbgadgetendpoint0.o \
 	  usbmidigadget.o usbmidigadgetendpoint.o \
 	  usbcdcgadget.o usbcdcgadgetendpoint.o \
+	  usbcdgadget.o usbcdgadgetendpoint.o \
 	  usbmsdgadget.o usbmsdgadgetendpoint.o
 
 endif
