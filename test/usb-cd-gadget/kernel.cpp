@@ -145,9 +145,9 @@ TShutdownMode CKernel::Run (void)
         }
 
 	// Start the CDROM
+	// FIXME
 	LOGNOTE("Loaded Image");
-	CLoopbackFileDevice m_LoopbackFileDevice("image", &pFile);
-	m_CDGadget.SetDevice (&m_LoopbackFileDevice);
+	m_CDGadget.SetDevice (new CLoopbackFileDevice("image.iso", &pFile));
 
 	bool showIP = true;
 	static const char ServiceName[] = HOSTNAME;
@@ -185,7 +185,7 @@ TShutdownMode CKernel::Run (void)
 
 		// Start the Web Server
 		if (m_Net.IsRunning() && pCWebServer == nullptr) {
-			pCWebServer = new CWebServer (&m_Net, &m_ActLED) ;
+			pCWebServer = new CWebServer (&m_Net, &m_CDGadget, &m_ActLED) ;
 			LOGNOTE("Started Webserver");
                 }
 

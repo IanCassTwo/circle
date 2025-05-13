@@ -35,9 +35,10 @@ LOGMODULE ("kernel");
 
 static const char FromWebServer[] = "webserver";
 
-CWebServer::CWebServer (CNetSubSystem *pNetSubSystem, CActLED *pActLED, CSocket *pSocket)
+CWebServer::CWebServer (CNetSubSystem *pNetSubSystem, CUSBCDGadget *pCDGadget, CActLED *pActLED, CSocket *pSocket)
 :       CHTTPDaemon (pNetSubSystem, pSocket, MAX_CONTENT_SIZE),
-        m_pActLED (pActLED)
+        m_pActLED (pActLED),
+	m_pCDGadget (pCDGadget)
 {
 }
 
@@ -48,7 +49,7 @@ CWebServer::~CWebServer (void)
 
 CHTTPDaemon *CWebServer::CreateWorker (CNetSubSystem *pNetSubSystem, CSocket *pSocket)
 {
-        return new CWebServer (pNetSubSystem, m_pActLED, pSocket);
+        return new CWebServer (pNetSubSystem, m_pCDGadget, m_pActLED, pSocket);
 }
 
 THTTPStatus list_files_as_json(char *json_output, size_t max_len) {
@@ -127,8 +128,39 @@ THTTPStatus CWebServer::GetContent (const char  *pPath,
                 nLength = strlen((char*)json_output);
                 *ppContentType = "application/json; charset=iso-8859-1";
 	} 
-	else if (strcmp (pPath, "/controller") == 0 && (strcmp (pParams, "mount") == 0)) 
+	else if (strcmp (pPath, "/controller") == 0 && (strncmp (pParams, "mount=", 6) == 0)) 
 	{ 
+		// Extract value (after '=')
+		char pParamValue[256];
+		const char* equalSign = strchr(pParams, '=');
+		if (equalSign && *(equalSign + 1) != '\0') {
+			strncpy(pParamValue, equalSign + 1, sizeof(pParamValue) - 1);
+			pParamValue[sizeof(pParamValue) - 1] = '\0';
+
+			// Open the new image file
+			char path[256];
+			snprintf(path, sizeof(path), "SD:/images/%s", pParamValue);
+			FIL pFile;
+			FRESULT Result = f_open(&pFile, path, FA_READ);
+			if (Result != FR_OK)
+			{
+			    LOGERR("Cannot open iso file for reading");
+			    pContent = (const u8*)"";
+			    nLength = 0;
+			    return HTTPInternalServerError;
+			}
+
+			m_pCDGadget->SetDevice (new CLoopbackFileDevice("image", &pFile));
+			pContent = (const u8*)"{\"status\": \"OK\"}";
+			nLength = 16;
+			*ppContentType = "application/json; charset=iso-8859-1";
+		} else {
+			    LOGERR("mount value is missing");
+			    pContent = (const u8*)"mount value is missing";
+			    nLength = 22;
+			    return HTTPBadRequest;
+		}
+
 	}
 	else
         {

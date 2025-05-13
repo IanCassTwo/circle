@@ -462,6 +462,10 @@ private:
 	u64 m_nDeviceBlocks=0;
 	u32 m_nbyteCount;
 	boolean m_CDReady=false;
+
+	u8 bmCSWStatus = 0;
+	u8 bSenseKey = 0;
+        u8 bAddlSenseCode = 0;
 };
 
 #endif

@@ -20,15 +20,18 @@
 #ifndef _webserver_h
 #define _webserver_h
 
+#include <circle/usb/gadget/usbcdgadget.h>
 #include <circle/net/httpdaemon.h>
 #include <circle/actled.h>
 #include <fatfs/ff.h>
 #include <linux/kernel.h>
+#include <loopback/loopback.h>
 
 class CWebServer : public CHTTPDaemon
 {
 public:
         CWebServer (CNetSubSystem *pNetSubSystem,
+		CUSBCDGadget *pCDGadget,
                     CActLED       *pActLED,                     // the LED to be controlled
                     CSocket       *pSocket = 0);                // is 0 for 1st created instance (listener)
         ~CWebServer (void);
@@ -46,6 +49,7 @@ public:
 
 private:
         CActLED *m_pActLED;
+        CUSBCDGadget *m_pCDGadget;
 };
 
 #endif
