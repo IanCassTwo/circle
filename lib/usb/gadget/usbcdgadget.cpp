@@ -104,7 +104,8 @@ CUSBCDGadget::CUSBCDGadget (CInterruptSystem *pInterruptSystem, CDevice *pDevice
 	m_pEP {nullptr, nullptr, nullptr}
 {
 	MLOGNOTE ("CUSBCDGadget::CUSBCDGadget", "entered");
-	if(pDevice)SetDevice(pDevice);
+	if(pDevice)
+		SetDevice(pDevice);
 }
 
 CUSBCDGadget::~CUSBCDGadget (void)
@@ -183,12 +184,10 @@ void CUSBCDGadget::SetDevice (CDevice* dev)
 {
 	MLOGNOTE ("CUSBCDGadget::SetDevice", "entered");
 	m_pDevice=dev;
-	MLOGNOTE("CUSBCDGadget::SetDevice","Getting size");
 	u64 devSize=dev->GetSize();
-	MLOGNOTE("CUSBCDGadget::SetDevice","Size is %d", devSize);
 	if(devSize==(u64)-1)MLOGERR("SetDevice","Device size not reported");
 	u64 blocks = devSize/BLOCK_SIZE;
-	MLOGNOTE("CUSBCDGadget::SetDevice","Blocks are %d", blocks);
+	MLOGNOTE("CUSBCDGadget::SetDevice","Size is %d, Blocks are %d", devSize, blocks);
 	InitDeviceSize(blocks);
 }
 
@@ -434,7 +433,7 @@ u32 getAddress(u32 lba, int msf) {
 void CUSBCDGadget::HandleSCSICommand()
 {
 
-	//MLOGNOTE ("CUSBCDGadget::HandleSCSICommand", "SCSI Command is 0x%02x", m_CBW.CBWCB[0]);
+	MLOGNOTE ("CUSBCDGadget::HandleSCSICommand", "SCSI Command is 0x%02x", m_CBW.CBWCB[0]);
 	switch(m_CBW.CBWCB[0])
 	{
 	case 0x0: // Test unit ready

@@ -369,7 +369,7 @@ private:
 	TUSBCDCBW m_CBW;
 	TUSBCDCSW m_CSW;
 
-	TUSBCDInquiryReply m_InqReply {0x05,0x80,0x02,0x02,0x1F,0,0,0,{'C','i','r','c','l','e',0,0},
+	TUSBCDInquiryReply m_InqReply {0x05,0x80,0x00,0x02,0x1F,0,0,0,{'C','i','r','c','l','e',0,0},
                                         {'C','i','r','c','l','e',' ','C','D','R','O','M',0,0,0,0},
                                         {'0','0','0',0}};
 	TUSBUintSerialNumberPage m_InqSerialReply {0x80,0x00, 0x0000, 0x04, {'0','0','0',0}};

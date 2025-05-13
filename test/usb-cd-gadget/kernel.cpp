@@ -20,6 +20,13 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 #include "kernel.h"
+#include "webserver.h"
+#include "ftpdaemon.h"
+
+#define DRIVE "SD:"
+#define FIRMWARE_PATH   DRIVE "/firmware/"
+#define CONFIG_FILE     DRIVE "/wpa_supplicant.conf"
+#define HOSTNAME "CDROM"
 
 LOGMODULE ("kernel");
 
@@ -28,6 +35,9 @@ CKernel::CKernel (void)
 	m_Timer (&m_Interrupt),
 	m_Logger (m_Options.GetLogLevel (), &m_Timer),
 	m_EMMC (&m_Interrupt, &m_Timer, &m_ActLED),
+	m_WLAN (FIRMWARE_PATH),
+        m_Net (0, 0, 0, 0, HOSTNAME, NetDeviceTypeWLAN),
+        m_WPASupplicant (CONFIG_FILE),
 	m_CDGadget (&m_Interrupt)
 {
 	m_ActLED.Blink (5);	// show we are alive
@@ -44,11 +54,13 @@ boolean CKernel::Initialize (void)
 	if (bOK)
 	{
 		bOK = m_Screen.Initialize ();
+		LOGNOTE("Initialized screen");
 	}
 
 	if (bOK)
 	{
 		bOK = m_Serial.Initialize (115200);
+		LOGNOTE("Initialized serial");
 	}
 
 	if (bOK)
@@ -60,27 +72,61 @@ boolean CKernel::Initialize (void)
 		}
 
 		bOK = m_Logger.Initialize (pTarget);
+		LOGNOTE("Initialized logger");
 	}
 
 	if (bOK)
 	{
 		bOK = m_Interrupt.Initialize ();
+		LOGNOTE("Initialized interrupts");
 	}
 
 	if (bOK)
 	{
 		bOK = m_Timer.Initialize ();
+		LOGNOTE("Initialized timer");
 	}
 
 	if (bOK)
 	{
 		bOK = m_EMMC.Initialize ();
+		LOGNOTE("Initialized emmc");
 	}
+
+	if (bOK)
+        {
+                if (f_mount (&m_FileSystem, DRIVE, 1) != FR_OK)
+                {
+                        LOGERR("Cannot mount drive: %s", DRIVE);
+
+                        bOK = FALSE;
+                }
+		LOGNOTE("Initialized filesystem");
+        }
 
 	if(bOK)
 	{
 		bOK = m_CDGadget.Initialize ();
+		LOGNOTE("Initialized cdrom");
 	}
+
+	if (bOK)
+        {
+                bOK = m_WLAN.Initialize ();
+		LOGNOTE("Initialized wlan");
+        }
+
+        if (bOK)
+        {
+                bOK = m_Net.Initialize (FALSE);
+		LOGNOTE("Initialized network");
+        }
+
+        if (bOK)
+        {
+                bOK = m_WPASupplicant.Initialize ();
+		LOGNOTE("Initialized wap supplicant");
+        }
 
 	return bOK;
 }
@@ -89,35 +135,75 @@ TShutdownMode CKernel::Run (void)
 {
 	LOGNOTE ("Compile time: " __DATE__ " " __TIME__);
 
-	// Try to mount file system
-        FRESULT Result = f_mount (&m_FileSystem, "SD:", 1);
-        if (Result != FR_OK)
-        {
-                LOGERR("Mount error (%u)", Result);
-                return ShutdownHalt;
-        }
-
+	// Load our image
         FIL pFile;
-        Result = f_open (&pFile, "SD:/image.iso", FA_READ);
+        FRESULT Result = f_open (&pFile, "SD:/image.iso", FA_READ);
         if (Result != FR_OK)
         {
                 LOGERR("Cannot open iso file for reading");
                 return ShutdownHalt;
         }
 
+	// Start the CDROM
+	LOGNOTE("Loaded Image");
 	CLoopbackFileDevice m_LoopbackFileDevice("image", &pFile);
-
-	//m_CDGadget.SetDevice (&m_EMMC);
 	m_CDGadget.SetDevice (&m_LoopbackFileDevice);
+
+	bool showIP = true;
+	static const char ServiceName[] = HOSTNAME;
+	static const char *ppText[] = {"path=/index.html", nullptr};
+	CmDNSPublisher *pmDNSPublisher = nullptr;
+	CWebServer *pCWebServer = nullptr;
+	CFTPDaemon *m_pFTPDaemon = nullptr;
 
 	for (unsigned nCount = 0; 1; nCount++)
 	{
-		m_CDGadget.UpdatePlugAndPlay ();
-
 		// must be called from TASK_LEVEL to allow I/O operations
+		m_CDGadget.UpdatePlugAndPlay ();
 		m_CDGadget.Update ();
 
-		m_Screen.Rotor (0, nCount);
+		// Show details of the network connection
+		if (m_Net.IsRunning() && showIP) {
+                        showIP = false;
+                        LOGNOTE("==========================================");
+                        m_WLAN.DumpStatus ();
+                        CString IPString;
+                        m_Net.GetConfig ()->GetIPAddress ()->Format (&IPString);
+                        LOGNOTE("Our IP address is %s", (const char *) IPString);
+                        LOGNOTE("==========================================");
+		}
+
+		// Publish mDNS
+		if (m_Net.IsRunning() && pmDNSPublisher == nullptr) {
+			pmDNSPublisher = new CmDNSPublisher (&m_Net);
+			if (!pmDNSPublisher->PublishService (ServiceName, "_http._tcp", 5004, ppText))
+			{
+				LOGNOTE ("Cannot publish service");
+			}
+			LOGNOTE("Published mDNS");
+		}
+
+		// Start the Web Server
+		if (m_Net.IsRunning() && pCWebServer == nullptr) {
+			pCWebServer = new CWebServer (&m_Net, &m_ActLED) ;
+			LOGNOTE("Started Webserver");
+                }
+
+		// Start the FTP Server
+		if (m_Net.IsRunning() && !m_pFTPDaemon)
+		{
+			m_pFTPDaemon = new CFTPDaemon("cdrom", "cdrom");
+			if (!m_pFTPDaemon->Initialize())
+			{
+				LOGERR("Failed to init FTP daemon");
+				delete m_pFTPDaemon;
+				m_pFTPDaemon = nullptr;
+			}
+			else
+				LOGNOTE("FTP daemon initialized");
+		}
+
+                m_Scheduler.Yield();
 	}
 
 	LOGNOTE("ShutdownHalt");

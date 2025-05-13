@@ -34,6 +34,11 @@
 #include <fatfs/ff.h>
 #include <circle/types.h>
 #include <loopback/loopback.h>
+#include <wlan/bcm4343.h>
+#include <wlan/hostap/wpa_supplicant/wpasupplicant.h>
+#include <circle/net/netsubsystem.h>
+#include <circle/sched/scheduler.h>
+#include <circle/net/mdnspublisher.h>
 
 enum TShutdownMode
 {
@@ -63,10 +68,14 @@ private:
 	CInterruptSystem	m_Interrupt;
 	CTimer			m_Timer;
 	CLogger			m_Logger;
+	CScheduler              m_Scheduler;
 
 	CEMMCDevice		m_EMMC;
-	CUSBCDGadget		m_CDGadget;
 	FATFS                   m_FileSystem;
+	CBcm4343Device          m_WLAN;
+        CNetSubSystem           m_Net;
+        CWPASupplicant          m_WPASupplicant;
+	CUSBCDGadget		m_CDGadget;
 };
 
 #endif
