@@ -14,7 +14,7 @@ CLoopbackFileDevice::CLoopbackFileDevice(const char* pName, FIL* pFile)
 
 CLoopbackFileDevice::~CLoopbackFileDevice(void)
 {
-	f_close(&pFile);
+	f_close(m_pFile);
 }
 
 int CLoopbackFileDevice::Read(void *pBuffer, size_t nSize)

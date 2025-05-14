@@ -137,11 +137,32 @@ THTTPStatus CWebServer::GetContent (const char  *pPath,
 			strncpy(pParamValue, equalSign + 1, sizeof(pParamValue) - 1);
 			pParamValue[sizeof(pParamValue) - 1] = '\0';
 
+			// Write pParamValue to SD:/image.txt
+			FIL txtFile;
+			UINT bytesWritten;
+			FRESULT Result = f_open(&txtFile, "SD:/image.txt", FA_WRITE | FA_CREATE_ALWAYS);
+			if (Result != FR_OK) {
+				LOGERR("Cannot open image.txt for writing");
+				pContent = (const u8*)"";
+				nLength = 0;
+				return HTTPInternalServerError;
+			}
+
+			Result = f_write(&txtFile, pParamValue, strlen(pParamValue), &bytesWritten);
+			f_close(&txtFile);
+
+			if (Result != FR_OK || bytesWritten != strlen(pParamValue)) {
+				LOGERR("Failed to write to image.txt");
+				pContent = (const u8*)"";
+				nLength = 0;
+				return HTTPInternalServerError;
+			}
+    
 			// Open the new image file
 			char path[256];
 			snprintf(path, sizeof(path), "SD:/images/%s", pParamValue);
 			FIL pFile;
-			FRESULT Result = f_open(&pFile, path, FA_READ);
+			Result = f_open(&pFile, path, FA_READ);
 			if (Result != FR_OK)
 			{
 			    LOGERR("Cannot open iso file for reading");
