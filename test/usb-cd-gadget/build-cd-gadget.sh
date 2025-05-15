@@ -1,5 +1,5 @@
 #!/bin/bash
-set -ex
+set -e
 
 projectRoot=$(git rev-parse --show-toplevel)
 echo "This script requires a successful ./configure -r X --prefix=/path/to/arm-gnu-toolchain-14.2.rel1-x86_64-arm-none-eabi/bin/arm-none-eabi- run in ${projectRoot}"
