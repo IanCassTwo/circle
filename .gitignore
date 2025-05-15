@@ -93,3 +93,5 @@ tmp/
 # Other
 # ----------------------------------------------
 /circle.geany
+/test/usb-cd-gadget/index.h
+
