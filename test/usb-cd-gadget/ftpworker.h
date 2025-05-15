@@ -132,7 +132,8 @@ private:
 
 	// Command/data buffers
 	char m_CommandBuffer[FRAME_BUFFER_SIZE];
-	u8 m_DataBuffer[FRAME_BUFFER_SIZE];
+	//u8 m_DataBuffer[FRAME_BUFFER_SIZE];
+	u8 m_DataBuffer[16384];
 
 	// Session state
 	CString m_User;

@@ -42,12 +42,12 @@ const TUSBDeviceDescriptor CUSBCDGadget::s_DeviceDescriptor =
 	0,               //bDeviceClass
 	0,              //bDeviceSubClass
 	0,              //bDeviceProtocol
-	64,				// wMaxPacketSize0
-	0x04da, // Panasonic
-	0x0d01,	// CDROM
-	//USB_GADGET_VENDOR_ID,
-	//USB_GADGET_DEVICE_ID_CD,
-	0x100,				// bcdDevice
+	64,		// bMaxPacketSize0
+	//0x04da, // Panasonic
+	//0x0d01,	// CDROM
+	USB_GADGET_VENDOR_ID,
+	USB_GADGET_DEVICE_ID_CD,
+	0x000,				// bcdDevice
 	1, 2, 0,			// strings
 	1                   //num configurations
 };
@@ -70,7 +70,7 @@ const CUSBCDGadget::TUSBMSTGadgetConfigurationDescriptor CUSBCDGadget::s_Configu
 		0,			// bInterfaceNumber
 		0,			// bAlternateSetting
 		2,			// bNumEndpoints
-		0x08, 0x05, 0x50,	// bInterfaceClass, SubClass, Protocol
+		0x08, 0x02, 0x50,	// bInterfaceClass, SubClass, Protocol
 		0			// iInterface
 	},
 	{
@@ -446,7 +446,7 @@ u32 getAddress(u32 lba, int msf) {
 void CUSBCDGadget::HandleSCSICommand()
 {
 
-	MLOGNOTE ("CUSBCDGadget::HandleSCSICommand", "SCSI Command is 0x%02x", m_CBW.CBWCB[0]);
+	//MLOGNOTE ("CUSBCDGadget::HandleSCSICommand", "SCSI Command is 0x%02x", m_CBW.CBWCB[0]);
 	switch(m_CBW.CBWCB[0])
 	{
 	case 0x0: // Test unit ready

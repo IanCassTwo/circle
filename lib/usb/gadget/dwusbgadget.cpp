@@ -58,6 +58,7 @@ CDWUSBGadget::~CDWUSBGadget (void)
 
 boolean CDWUSBGadget::Initialize (boolean bScanDevices)
 {
+	LOGNOTE("Initialize entered");
 	// Check Vendor ID
 	size_t nDescLength;
 	const TUSBDeviceDescriptor *pDeviceDesc =
@@ -134,6 +135,8 @@ boolean CDWUSBGadget::Initialize (boolean bScanDevices)
 
 boolean CDWUSBGadget::UpdatePlugAndPlay (void)
 {
+	
+	//LOGNOTE("CDWUSBGadget::UpdatePlugAndPlay entered");
 	boolean bResult = FALSE;
 
 	if (m_bPnPEvent[PnPEventSuspend])
@@ -165,14 +168,18 @@ boolean CDWUSBGadget::UpdatePlugAndPlay (void)
 		assert (pDeviceDesc);
 		new CDWUSBGadgetEndpoint0 (pDeviceDesc->bMaxPacketSize0, this);
 
+		LOGNOTE("CDWUSBGadget::UpdatePlugAndPlay Adding Endpoints");
 		AddEndpoints ();
+		LOGNOTE("CDWUSBGadget::UpdatePlugAndPlay Added Endpoints");
 
 		m_State = StateSuspended;
 
 		// Enable all interrupts
+		LOGNOTE("CDWUSBGadget::UpdatePlugAndPlay Enabling Interrupts");
 		AHBConfig.Read ();
 		AHBConfig.Or (DWHCI_CORE_AHB_CFG_GLOBALINT_MASK);
 		AHBConfig.Write ();
+		LOGNOTE("CDWUSBGadget::UpdatePlugAndPlay Enabled Interrupts");
 	}
 	else if (m_bPnPEvent[PnPEventConfigured])
 	{

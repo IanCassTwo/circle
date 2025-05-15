@@ -722,11 +722,12 @@ bool CFTPWorker::Store(const char* pArgs)
 			break;
 		}
 
-		f_sync(&File);
+		//f_sync(&File);
 		CScheduler::Get()->Yield();
 
 		nTimeout = pTimer->GetTicks();
 	}
+	f_sync(&File);
 
 	if (bSuccess)
 		SendStatus(TFTPStatus::TransferComplete, "Transfer complete.");

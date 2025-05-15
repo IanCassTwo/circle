@@ -8,7 +8,7 @@
 
 CLoopbackFileDevice::CLoopbackFileDevice(const char* pName, FIL* pFile)
 {
-	snprintf(m_DeviceName, sizeof(m_DeviceName), "loopback-%s", pName);
+	//m_DeviceName = pName;
 	m_pFile = pFile;
 }
 
@@ -31,7 +31,6 @@ int CLoopbackFileDevice::Read(void *pBuffer, size_t nSize)
                 LogWrite(LogError, "Failed to read %d bytes into memory", nSize);
                 return -1;
         }
-        LogWrite(LogError, "Read Returning %d", nBytesRead);
 	return nBytesRead;
 }
 
@@ -53,7 +52,6 @@ u64 CLoopbackFileDevice::Seek(u64 nOffset)
                 LogWrite(LogError, "Seek Not Ok");
 		return 0;
 	}
-        LogWrite(LogError, "Seek Returning %llu for offset, file size is %llu", nOffset, f_size(m_pFile));
 	return nOffset;
 }
 

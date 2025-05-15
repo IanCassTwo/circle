@@ -40,7 +40,7 @@ CKernel::CKernel (void)
         m_WPASupplicant (CONFIG_FILE),
 	m_CDGadget (&m_Interrupt)
 {
-	m_ActLED.Blink (5);	// show we are alive
+	//m_ActLED.Blink (5);	// show we are alive
 }
 
 CKernel::~CKernel (void)
@@ -241,7 +241,7 @@ TShutdownMode CKernel::Run (void)
                 m_Scheduler.Yield();
 
 		// Stop spinning
-                m_Scheduler.MsSleep(10);
+                //m_Scheduler.MsSleep(10);
 	}
 
 	LOGNOTE("ShutdownHalt");
