@@ -180,9 +180,9 @@ TShutdownMode CKernel::Run (void)
         }
 
 	// Start the CDROM
-	// FIXME
+	// FIXME don't assume it's an iso
 	LOGNOTE("Loaded Image");
-	m_CDGadget.SetDevice (new CLoopbackFileDevice("image.iso", &pFile));
+	m_CDGadget.SetDevice (new CISOFileDevice(&pFile));
 
 	bool showIP = true;
 	static const char ServiceName[] = HOSTNAME;

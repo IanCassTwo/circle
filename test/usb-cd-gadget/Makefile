@@ -18,7 +18,7 @@ LIBS	= $(CIRCLEHOME)/lib/usb/libusb.a \
 	  $(CIRCLEHOME)/lib/fs/libfs.a \
 	  $(CIRCLEHOME)/lib/libcircle.a \
 	  $(CIRCLEHOME)/addon/SDCard/libsdcard.a \
-	  $(CIRCLEHOME)/addon/loopback/libloopback.a
+	  $(CIRCLEHOME)/addon/discimage/libdiscimage.a
 
 include $(CIRCLEHOME)/Rules.mk
 

@@ -9,7 +9,7 @@ git submodule update --init --recursive
 cd ${projectRoot}
 ./makeall clean
 ./makeall
-cd ${projectRoot}/addon/loopback
+cd ${projectRoot}/addon/discimage
 make clean
 make
 cd ${projectRoot}/addon/linux

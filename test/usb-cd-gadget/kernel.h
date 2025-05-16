@@ -33,7 +33,8 @@
 #include <SDCard/emmc.h>
 #include <fatfs/ff.h>
 #include <circle/types.h>
-#include <loopback/loopback.h>
+#include <discimage/isofile.h>
+#include <discimage/cuebinfile.h>
 #include <wlan/bcm4343.h>
 #include <wlan/hostap/wpa_supplicant/wpasupplicant.h>
 #include <circle/net/netsubsystem.h>
