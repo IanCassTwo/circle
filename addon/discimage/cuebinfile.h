@@ -22,7 +22,6 @@ public:
         int Write (const void *pBuffer, size_t nCount);
         u64 Seek (u64 ullOffset);
         u64 GetSize (void) const;
-	int IOCtl(unsigned long ulCmd, void *pData);
 	const char* GetCueSheet() const;
 	static void LogWrite (TLogSeverity Severity, const char *pMessage, ...);
 

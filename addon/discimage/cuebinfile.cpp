@@ -1,5 +1,4 @@
 #include "cuebinfile.h"
-#include "ioctl.h"
 #include <circle/util.h>
 #include <circle/stdarg.h>
 #include <assert.h>
@@ -72,24 +71,6 @@ u64 CCueBinFileDevice::GetSize(void) const
 	}
 
 	return f_size(m_pFile);
-}
-
-int CCueBinFileDevice::IOCtl(unsigned long ulCmd, void *pData)
-{
-	switch (ulCmd)
-	{
-		// All because C++ doesn't have a convenient "instanceof" 
-		// function and I can't use dynamic_cast
-		case IOC_FILE_TYPE:
-			if (pData != nullptr)
-			{
-				FileType* pFileType = static_cast<FileType*>(pData);
-				*pFileType = m_FileType;
-				return 0;
-			}
-			return -1;
-	}
-	return -1;
 }
 
 char *readCueFromFIL(FIL *file) {
