@@ -15,7 +15,7 @@
 class CCueBinFileDevice : public CDevice
 {
 public:
-	CCueBinFileDevice(FIL* pFile, FIL* cFile);
+	CCueBinFileDevice(FIL* pFile, const char* cue_str = nullptr);
 	~CCueBinFileDevice(void);
 
 	int Read (void *pBuffer, size_t nCount);
@@ -23,13 +23,17 @@ public:
         u64 Seek (u64 ullOffset);
         u64 GetSize (void) const;
 	int IOCtl(unsigned long ulCmd, void *pData);
-	FIL* GetCueFileHandle() const;
+	const char* GetCueSheet() const;
 	static void LogWrite (TLogSeverity Severity, const char *pMessage, ...);
 
 private:
 	FIL* m_pFile;
-	FIL* m_cFile;
-	FileType m_FileType;
+	FileType m_FileType = FileType::ISO;
+	const char* m_cue_str = nullptr;
+	static constexpr const char* default_cue_sheet =
+		"FILE \"image.iso\" BINARY\n"
+		"  TRACK 01 MODE1/2048\n"
+		"    INDEX 01 00:00:00\n";
 };
 
 #endif

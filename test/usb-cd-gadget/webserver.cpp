@@ -171,7 +171,7 @@ THTTPStatus CWebServer::GetContent (const char  *pPath,
 			    return HTTPInternalServerError;
 			}
 
-			m_pCDGadget->SetDevice (new CISOFileDevice(&pFile));
+			m_pCDGadget->SetDevice (new CCueBinFileDevice(&pFile));
 			pContent = (const u8*)"{\"status\": \"OK\"}";
 			nLength = 16;
 			*ppContentType = "application/json; charset=iso-8859-1";

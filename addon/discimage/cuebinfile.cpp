@@ -4,20 +4,26 @@
 #include <circle/stdarg.h>
 #include <assert.h>
 #include <string.h>
+#include <stdlib.h>
 
 #define LOGSOURCE "CCueBinFileDevice"
 
-CCueBinFileDevice::CCueBinFileDevice(FIL* pFile, FIL* cFile)
+CCueBinFileDevice::CCueBinFileDevice(FIL* pFile, const char* cue_str)
 {
 	m_pFile = pFile;
-	m_cFile = cFile;
-	m_FileType = FileType::TypeCUEBIN;
+	if (cue_str != nullptr)
+	{
+		m_cue_str = cue_str;
+		m_FileType = FileType::CUEBIN;
+	} else {
+		m_cue_str = default_cue_sheet;
+		m_FileType = FileType::ISO;
+	}
 }
 
 CCueBinFileDevice::~CCueBinFileDevice(void)
 {
 	f_close(m_pFile);
-	f_close(m_cFile);
 }
 
 int CCueBinFileDevice::Read(void *pBuffer, size_t nSize)
@@ -86,8 +92,25 @@ int CCueBinFileDevice::IOCtl(unsigned long ulCmd, void *pData)
 	return -1;
 }
 
-FIL* CCueBinFileDevice::GetCueFileHandle() const {
-    return m_cFile;
+char *readCueFromFIL(FIL *file) {
+    // Get file size
+    DWORD file_size = f_size(file);
+    char *buffer = (char *)malloc(file_size + 1); // +1 for null terminator
+    if (!buffer) return nullptr;
+
+    UINT bytes_read;
+    FRESULT res = f_read(file, buffer, file_size, &bytes_read);
+    if (res != FR_OK || bytes_read != file_size) {
+        free(buffer);
+        return nullptr;
+    }
+    f_close(file);
+    buffer[file_size] = '\0'; // null terminate
+    return buffer;
+}
+
+const char* CCueBinFileDevice::GetCueSheet() const {
+	return m_cue_str;
 }
 
 void CCueBinFileDevice::LogWrite (TLogSeverity Severity, const char *pMessage, ...)

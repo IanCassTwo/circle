@@ -4,7 +4,7 @@
 
 CIRCLEHOME = ../..
 
-OBJS    = isofile.o cuebinfile.o
+OBJS    = cuebinfile.o
 
 libdiscimage.a: $(OBJS)
 	@echo "  AR    $@"

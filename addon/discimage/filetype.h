@@ -2,7 +2,7 @@
 #define _LOOPBACKFILETYTPES_H
 
 enum class FileType {
-       	TypeISO,
-	TypeCUEBIN
+       	ISO,
+	CUEBIN
 };
 #endif

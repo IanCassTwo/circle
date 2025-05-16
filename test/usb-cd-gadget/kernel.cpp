@@ -182,7 +182,7 @@ TShutdownMode CKernel::Run (void)
 	// Start the CDROM
 	// FIXME don't assume it's an iso
 	LOGNOTE("Loaded Image");
-	m_CDGadget.SetDevice (new CISOFileDevice(&pFile));
+	m_CDGadget.SetDevice (new CCueBinFileDevice(&pFile));
 
 	bool showIP = true;
 	static const char ServiceName[] = HOSTNAME;

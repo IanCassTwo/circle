@@ -25,7 +25,6 @@
 #include <circle/actled.h>
 #include <fatfs/ff.h>
 #include <linux/kernel.h>
-#include <discimage/isofile.h>
 #include <discimage/cuebinfile.h>
 
 class CWebServer : public CHTTPDaemon
