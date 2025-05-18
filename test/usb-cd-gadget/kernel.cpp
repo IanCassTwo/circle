@@ -22,7 +22,7 @@
 #include "kernel.h"
 #include "webserver.h"
 #include "ftpdaemon.h"
-#include <circle/util.h>
+#include "util.h"
 
 #define DRIVE "SD:"
 #define FIRMWARE_PATH   DRIVE "/firmware/"
@@ -134,27 +134,6 @@ boolean CKernel::Initialize (void)
 	return bOK;
 }
 
-bool hasBinExtension(const char* imageName) {
-    size_t len = strlen(imageName);
-    if (len >= 4) {
-        const char* ext = imageName + len - 4;
-        return tolower(ext[0]) == '.' &&
-               tolower(ext[1]) == 'b' &&
-               tolower(ext[2]) == 'i' &&
-               tolower(ext[3]) == 'n';
-    }
-    return false;
-}
-
-void change_extension_to_cue(char *fullPath) {
-    size_t len = strlen(fullPath);
-    if (len >= 3 && strcmp(fullPath + len - 3, "bin") == 0) {
-        fullPath[len - 3] = 'c';
-        fullPath[len - 2] = 'u';
-        fullPath[len - 1] = 'e';
-    }
-}
-
 TShutdownMode CKernel::Run (void)
 {
 	LOGNOTE ("Compile time: " __DATE__ " " __TIME__);
@@ -190,13 +169,21 @@ TShutdownMode CKernel::Run (void)
 	    }
 	}
 
+	CCueBinFileDevice* cueBinFileDevice = loadCueBinFileDevice(imageName);
+	if (!cueBinFileDevice) {
+		LOGERR("Failed to get cueBinFileDevice");
+		return ShutdownHalt;
+	}
+
+	m_CDGadget.SetDevice (cueBinFileDevice);
+
+	/*
 	// Construct full path
 	char fullPath[160];
 	snprintf(fullPath, sizeof(fullPath), "SD:/images/%s", imageName);
 
 	// Load our image
         FIL pFile;
-        FIL cFile;
         Result = f_open (&pFile, fullPath, FA_READ);
         if (Result != FR_OK)
         {
@@ -204,6 +191,8 @@ TShutdownMode CKernel::Run (void)
                 return ShutdownHalt;
         }
 
+	// Is this a bin file?
+	char *cue_str = nullptr;
 	if (hasBinExtension(imageName)) {
 		// Load our cue
 		change_extension_to_cue(fullPath);
@@ -214,11 +203,34 @@ TShutdownMode CKernel::Run (void)
 			LOGERR("Cannot open iso file for reading");
 			return ShutdownHalt;
 		}
+
+		// Get file size
+		DWORD file_size = f_size(&cFile);
+
+		// Allocate buffer (+1 for null-terminator)
+		char *buffer = new char[file_size + 1];
+		if (!buffer) {
+			f_close(&cFile);
+			return ShutdownHalt;
+		}
+
+		UINT bytes_read = 0;
+		FRESULT res = f_read(&cFile, buffer, file_size, &bytes_read);
+		f_close(&cFile);
+
+		if (res != FR_OK || bytes_read != file_size) {
+			delete[] buffer;
+			return ShutdownHalt;
+		}
+		buffer[file_size] = '\0'; // null-terminate
+		cue_str = buffer;
 	}
 
 	// Start the CDROM
 	LOGNOTE("Loaded Image");
-	m_CDGadget.SetDevice (new CCueBinFileDevice(&pFile, &cFile));
+	m_CDGadget.SetDevice (new CCueBinFileDevice(&pFile, cue_str));
+	*/
+
 	m_CDGadget.Initialize ();
 
 	bool showIP = true;

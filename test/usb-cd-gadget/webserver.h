@@ -50,6 +50,7 @@ public:
 private:
         CActLED *m_pActLED;
         CUSBCDGadget *m_pCDGadget;
+	boolean SetDevice(char *imageName);
 };
 
 #endif

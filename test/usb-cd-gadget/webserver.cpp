@@ -20,7 +20,7 @@
 #include "webserver.h"
 #include <circle/logger.h>
 #include <circle/string.h>
-#include <circle/util.h>
+#include "util.h"
 #include <assert.h>
 
 #define MAX_CONTENT_SIZE        8192
@@ -158,20 +158,13 @@ THTTPStatus CWebServer::GetContent (const char  *pPath,
 				return HTTPInternalServerError;
 			}
     
-			// Open the new image file
-			char path[256];
-			snprintf(path, sizeof(path), "SD:/images/%s", pParamValue);
-			FIL pFile;
-			Result = f_open(&pFile, path, FA_READ);
-			if (Result != FR_OK)
-			{
-			    LOGERR("Cannot open iso file for reading");
-			    pContent = (const u8*)"";
-			    nLength = 0;
-			    return HTTPInternalServerError;
+			CCueBinFileDevice* cueBinFileDevice = loadCueBinFileDevice(pParamValue);
+			if (!cueBinFileDevice) {
+				LOGERR("Failed to get cueBinFileDevice");
+				return HTTPInternalServerError;
 			}
 
-			m_pCDGadget->SetDevice (new CCueBinFileDevice(&pFile));
+			m_pCDGadget->SetDevice (cueBinFileDevice);
 			pContent = (const u8*)"{\"status\": \"OK\"}";
 			nLength = 16;
 			*ppContentType = "application/json; charset=iso-8859-1";

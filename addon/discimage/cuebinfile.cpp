@@ -7,15 +7,22 @@
 
 #define LOGSOURCE "CCueBinFileDevice"
 
-CCueBinFileDevice::CCueBinFileDevice(FIL* pFile, const char* cue_str)
+CCueBinFileDevice::CCueBinFileDevice(FIL* pFile, char* cue_str)
 {
 	m_pFile = pFile;
 	if (cue_str != nullptr)
 	{
+		// Make our own copy so we own it
+		size_t len = strlen(cue_str);
+		m_cue_str = new char[len + 1];
+		strcpy(m_cue_str, cue_str);
 		m_cue_str = cue_str;
 		m_FileType = FileType::CUEBIN;
 	} else {
-		m_cue_str = default_cue_sheet;
+		// Default cue sheet
+		size_t len = strlen(default_cue_sheet);
+		m_cue_str = new char[len + 1];
+		strcpy(m_cue_str, default_cue_sheet);
 		m_FileType = FileType::ISO;
 	}
 }
@@ -23,6 +30,8 @@ CCueBinFileDevice::CCueBinFileDevice(FIL* pFile, const char* cue_str)
 CCueBinFileDevice::~CCueBinFileDevice(void)
 {
 	f_close(m_pFile);
+	if (m_cue_str != nullptr)
+        	delete[] m_cue_str;
 }
 
 int CCueBinFileDevice::Read(void *pBuffer, size_t nSize)

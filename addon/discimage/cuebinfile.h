@@ -15,7 +15,7 @@
 class CCueBinFileDevice : public CDevice
 {
 public:
-	CCueBinFileDevice(FIL* pFile, const char* cue_str = nullptr);
+	CCueBinFileDevice(FIL* pFile, char* cue_str = nullptr);
 	~CCueBinFileDevice(void);
 
 	int Read (void *pBuffer, size_t nCount);
@@ -28,7 +28,7 @@ public:
 private:
 	FIL* m_pFile;
 	FileType m_FileType = FileType::ISO;
-	const char* m_cue_str = nullptr;
+	char* m_cue_str = nullptr;
 	static constexpr const char* default_cue_sheet =
 		"FILE \"image.iso\" BINARY\n"
 		"  TRACK 01 MODE1/2048\n"

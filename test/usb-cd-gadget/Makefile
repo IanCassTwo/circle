@@ -4,7 +4,7 @@
 
 CIRCLEHOME = ../..
 
-OBJS	= main.o kernel.o webserver.o ftpdaemon.o ftpworker.o
+OBJS	= main.o kernel.o webserver.o ftpdaemon.o ftpworker.o util.o
 
 LIBS	= $(CIRCLEHOME)/lib/usb/libusb.a \
 	  $(CIRCLEHOME)/lib/usb/gadget/libusbgadget.a \

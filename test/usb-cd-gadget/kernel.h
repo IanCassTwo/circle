@@ -54,6 +54,7 @@ public:
 	~CKernel (void);
 
 	boolean Initialize (void);
+	boolean SetDevice(char *imageName);
 
 	TShutdownMode Run (void);
 
