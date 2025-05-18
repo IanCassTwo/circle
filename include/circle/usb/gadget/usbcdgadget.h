@@ -31,6 +31,8 @@
 #include <circle/synchronize.h>
 #include <circle/macros.h>
 #include <circle/types.h>
+#include <discimage/cuebinfile.h>
+#include <cueparser/cueparser.h>
 
 // If system htonl is not available, define our own
 #ifndef HAVE_ARPA_INET_H
@@ -266,22 +268,22 @@ public:
 	/// \param pDevice Pointer to the block device, to be controlled by this gadget
 	/// \note pDevice must be initialized yet, when it is specified here.
 	/// \note SetDevice() has to be called later, when pDevice is not specified here.
-	CUSBCDGadget (CInterruptSystem *pInterruptSystem, CDevice *pDevice = nullptr);
+	CUSBCDGadget (CInterruptSystem *pInterruptSystem, CCueBinFileDevice *pDevice = nullptr);
 
 	~CUSBCDGadget (void);
 
 	/// \param pDevice Pointer to the block device, to be controlled by this gadget
 	/// \note Call this, if pDevice has not been specified in the constructor.
-	void SetDevice (CDevice *pDevice);
+	void SetDevice (CCueBinFileDevice *pDevice);
 
 	/// \brief Call this periodically from TASK_LEVEL to allow I/O operations!
 	void Update (void);
 
 	/// \param nBlocks Capacity of the block device in number of blocks (a 512 bytes)
 	/// \note Used when the block device does not report its size.
-	void SetDeviceBlocks(u64 nBlocks);
+	//void SetDeviceBlocks(u64 nBlocks);
 	/// \return Capacity of the block device in number of blocks (a 512 bytes)
-	u64 GetBlocks (void) const;
+	//u64 GetBlocks (void) const;
 
 protected:
 	/// \brief Get device-specific descriptor
@@ -320,9 +322,12 @@ private:
 	void SendCSW();
 
 	void InitDeviceSize(u64 blocks);
+	u32 getLeadOutLBA(const CUETrackInfo* lasttrack);
+	u32 getAddress(u32 lba, int msf);
+	u32 lba_to_msf(u32 lba);
 
 private:
-	CDevice *m_pDevice;
+	CCueBinFileDevice *m_pDevice;
 
 	enum TEPNumber
 	{
@@ -459,9 +464,11 @@ private:
 
 	u32 m_nblock_address;
 	u32 m_nnumber_blocks;
-	u64 m_nDeviceBlocks=0;
+	//u64 m_nDeviceBlocks=0;
 	u32 m_nbyteCount;
 	boolean m_CDReady=false;
+
+	CUEParser cueParser;;
 
 	u8 bmCSWStatus = 0;
 	u8 bSenseKey = 0;

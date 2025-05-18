@@ -104,11 +104,13 @@ boolean CKernel::Initialize (void)
 		LOGNOTE("Initialized filesystem");
         }
 
+	/*
 	if(bOK)
 	{
 		bOK = m_CDGadget.Initialize ();
 		LOGNOTE("Initialized cdrom");
 	}
+	*/
 
 	if (bOK)
         {
@@ -183,6 +185,7 @@ TShutdownMode CKernel::Run (void)
 	// FIXME don't assume it's an iso
 	LOGNOTE("Loaded Image");
 	m_CDGadget.SetDevice (new CCueBinFileDevice(&pFile));
+	m_CDGadget.Initialize ();
 
 	bool showIP = true;
 	static const char ServiceName[] = HOSTNAME;
