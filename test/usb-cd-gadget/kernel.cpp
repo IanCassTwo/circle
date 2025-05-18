@@ -22,6 +22,7 @@
 #include "kernel.h"
 #include "webserver.h"
 #include "ftpdaemon.h"
+#include <circle/util.h>
 
 #define DRIVE "SD:"
 #define FIRMWARE_PATH   DRIVE "/firmware/"
@@ -90,7 +91,7 @@ boolean CKernel::Initialize (void)
 	if (bOK)
 	{
 		bOK = m_EMMC.Initialize ();
-		LOGNOTE("Initialized emmc");
+		LOGNOTE("Initialized eMMC");
 	}
 
 	if (bOK)
@@ -115,7 +116,7 @@ boolean CKernel::Initialize (void)
 	if (bOK)
         {
                 bOK = m_WLAN.Initialize ();
-		LOGNOTE("Initialized wlan");
+		LOGNOTE("Initialized WLAN");
         }
 
         if (bOK)
@@ -127,17 +128,38 @@ boolean CKernel::Initialize (void)
         if (bOK)
         {
                 bOK = m_WPASupplicant.Initialize ();
-		LOGNOTE("Initialized wap supplicant");
+		LOGNOTE("Initialized WAP supplicant");
         }
 
 	return bOK;
+}
+
+bool hasBinExtension(const char* imageName) {
+    size_t len = strlen(imageName);
+    if (len >= 4) {
+        const char* ext = imageName + len - 4;
+        return tolower(ext[0]) == '.' &&
+               tolower(ext[1]) == 'b' &&
+               tolower(ext[2]) == 'i' &&
+               tolower(ext[3]) == 'n';
+    }
+    return false;
+}
+
+void change_extension_to_cue(char *fullPath) {
+    size_t len = strlen(fullPath);
+    if (len >= 3 && strcmp(fullPath + len - 3, "bin") == 0) {
+        fullPath[len - 3] = 'c';
+        fullPath[len - 2] = 'u';
+        fullPath[len - 1] = 'e';
+    }
 }
 
 TShutdownMode CKernel::Run (void)
 {
 	LOGNOTE ("Compile time: " __DATE__ " " __TIME__);
 
-	// // Load image name from image.txt
+	// Load image name from image.txt
 	FIL txtFile;
 	char imageName[128];  // Make sure this is large enough for the filename
 	FRESULT Result = f_open(&txtFile, "SD:/image.txt", FA_READ);
@@ -174,6 +196,7 @@ TShutdownMode CKernel::Run (void)
 
 	// Load our image
         FIL pFile;
+        FIL cFile;
         Result = f_open (&pFile, fullPath, FA_READ);
         if (Result != FR_OK)
         {
@@ -181,10 +204,21 @@ TShutdownMode CKernel::Run (void)
                 return ShutdownHalt;
         }
 
+	if (hasBinExtension(imageName)) {
+		// Load our cue
+		change_extension_to_cue(fullPath);
+		FIL cFile;
+		Result = f_open (&cFile, fullPath, FA_READ);
+		if (Result != FR_OK)
+		{
+			LOGERR("Cannot open iso file for reading");
+			return ShutdownHalt;
+		}
+	}
+
 	// Start the CDROM
-	// FIXME don't assume it's an iso
 	LOGNOTE("Loaded Image");
-	m_CDGadget.SetDevice (new CCueBinFileDevice(&pFile));
+	m_CDGadget.SetDevice (new CCueBinFileDevice(&pFile, &cFile));
 	m_CDGadget.Initialize ();
 
 	bool showIP = true;

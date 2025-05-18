@@ -36,7 +36,7 @@ int CCueBinFileDevice::Read(void *pBuffer, size_t nSize)
 	FRESULT result = f_read(m_pFile, pBuffer, nSize, &nBytesRead);
 	if (result != FR_OK)
         {
-                LogWrite(LogError, "Failed to read %d bytes into memory", nSize);
+                LogWrite(LogError, "Failed to read %d bytes into memory, err %d", nSize, result);
                 return -1;
         }
 	return nBytesRead;
@@ -55,9 +55,10 @@ u64 CCueBinFileDevice::Seek(u64 nOffset)
 		return -1;
 	}
 
-	if (f_lseek(m_pFile, nOffset) != FR_OK)
+	FRESULT result = f_lseek(m_pFile, nOffset);
+	if (result != FR_OK)
 	{
-                LogWrite(LogError, "Seek Not Ok");
+                LogWrite(LogError, "Seek to offset %llu is not ok, err %d", nOffset, result);
 		return 0;
 	}
 	return nOffset;
@@ -101,7 +102,7 @@ void CCueBinFileDevice::LogWrite (TLogSeverity Severity, const char *pMessage, .
         va_list var;
         va_start (var, pMessage);
 
-        CLogger::Get ()->WriteV ("loopbackfiledevice", Severity, pMessage, var);
+        CLogger::Get ()->WriteV ("cuebinfiledevice", Severity, pMessage, var);
 
         va_end (var);
 }
