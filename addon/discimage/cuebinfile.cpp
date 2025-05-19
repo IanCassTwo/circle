@@ -106,7 +106,7 @@ char *readCueFromFIL(FIL *file) {
 }
 
 const char* CCueBinFileDevice::GetCueSheet() const {
-	return m_cue_stf_sizer;
+	return m_cue_str;
 }
 
 void CCueBinFileDevice::LogWrite (TLogSeverity Severity, const char *pMessage, ...)
