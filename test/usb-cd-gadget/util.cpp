@@ -99,7 +99,7 @@ bool ReadFileToString(const char* fullPath, char** out_str) {
     return true;
 }
 
-CCueBinFileDevice* loadCueBinFileDevice(char* imageName) {
+CCueBinFileDevice* loadCueBinFileDevice(const char* imageName) {
 
     // Construct full path
     char fullPath[255]; //FIXME limits
@@ -148,3 +148,56 @@ CCueBinFileDevice* loadCueBinFileDevice(char* imageName) {
 
     return ccueBinFileDevice;
 }
+
+bool getCurrentMountedImage(char* outFilename, size_t maxLen) {
+    FIL txtFile;
+    UINT bytesRead = 0;
+
+    FRESULT result = f_open(&txtFile, "SD:/image.txt", FA_READ | FA_OPEN_EXISTING);
+    if (result != FR_OK) {
+        strncpy(outFilename, "None", maxLen);
+        outFilename[maxLen - 1] = '\0';
+        return false;
+    }
+
+    result = f_read(&txtFile, outFilename, maxLen - 1, &bytesRead);
+    f_close(&txtFile);
+
+    if (result != FR_OK) {
+        strncpy(outFilename, "image.iso", maxLen);
+        outFilename[maxLen - 1] = '\0';
+        return false;
+    }
+
+    // Null-terminate
+    outFilename[bytesRead] = '\0';
+
+    // Remove trailing \r and \n
+    int i = strlen(outFilename) - 1;
+    while (i >= 0 && (outFilename[i] == '\r' || outFilename[i] == '\n')) {
+        outFilename[i--] = '\0';
+    }
+
+    return true;
+}
+
+bool saveMountedImageName(const char* imageName) {
+    FIL txtFile;
+    UINT bytesWritten;
+    FRESULT result = f_open(&txtFile, "SD:/image.txt", FA_WRITE | FA_CREATE_ALWAYS);
+    if (result != FR_OK) {
+        LOGERR("Cannot open image.txt for writing");
+        return false;
+    }
+
+    result = f_write(&txtFile, imageName, strlen(imageName), &bytesWritten);
+    f_close(&txtFile);
+
+    if (result != FR_OK || bytesWritten != strlen(imageName)) {
+        LOGERR("Failed to write to image.txt");
+        return false;
+    }
+
+    return true;
+}
+

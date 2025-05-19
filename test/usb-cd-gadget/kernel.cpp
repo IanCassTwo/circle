@@ -138,35 +138,12 @@ TShutdownMode CKernel::Run (void)
 {
 	LOGNOTE ("Compile time: " __DATE__ " " __TIME__);
 
-	// Load image name from image.txt
-	FIL txtFile;
-	char imageName[128];  // Make sure this is large enough for the filename
-	FRESULT Result = f_open(&txtFile, "SD:/image.txt", FA_READ);
-	if (Result != FR_OK)
-	{
-	    LOGERR("Cannot open image.txt for reading");
-	    return ShutdownHalt;
-	}
-
-	// Read the filename
-	UINT bytesRead;
-	Result = f_read(&txtFile, imageName, sizeof(imageName) - 1, &bytesRead);
-	f_close(&txtFile);
-
-	if (Result != FR_OK || bytesRead == 0)
-	{
-	    LOGERR("Failed to read filename from image.txt");
-	    return ShutdownHalt;
-	}
-	imageName[bytesRead] = '\0';
-
-
-	// I wish we had strpbrk
-	for (int i = 0; imageName[i] != '\0'; ++i) {
-	    if (imageName[i] == '\r' || imageName[i] == '\n') {
-		imageName[i] = '\0';
-		break;
-	    }
+	char imageName[MAX_FILENAME];
+	if (getCurrentMountedImage(imageName, sizeof(imageName))) {
+	    LOGNOTE("Found image filename %s", imageName);
+	} else {
+	    strcpy(imageName, "image.iso");
+	    LOGERR("Could not load image name, using default: %s", imageName);
 	}
 
 	CCueBinFileDevice* cueBinFileDevice = loadCueBinFileDevice(imageName);

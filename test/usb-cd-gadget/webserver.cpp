@@ -96,36 +96,20 @@ CHTTPDaemon *CWebServer::CreateWorker (CNetSubSystem *pNetSubSystem, CSocket *pS
         return new CWebServer (pNetSubSystem, m_pCDGadget, m_pActLED, pSocket);
 }
 
-const char* getCurrentMountedImage() {
-    static char buffer[MAX_FILENAME];
-    FIL txtFile;
-    UINT bytesRead = 0;
-    
-    FRESULT Result = f_open(&txtFile, "SD:/image.txt", FA_READ);
-    if (Result != FR_OK) {
-        strcpy(buffer, "None");
-        return buffer;
-    }
-    
-    Result = f_read(&txtFile, buffer, sizeof(buffer) - 1, &bytesRead);
-    f_close(&txtFile);
-    
-    if (Result != FR_OK) {
-        strcpy(buffer, "Unknown");
-        return buffer;
-    }
-    
-    buffer[bytesRead] = '\0';
-    return buffer;
-}
-
 THTTPStatus list_files_as_table(char *output_buffer, size_t max_len) {
     DIR dir;
     FILINFO fno;
     FRESULT fr;
     char content[MAX_CONTENT_SIZE];
     size_t offset = 0;
-    const char* currentImage = getCurrentMountedImage();
+    char currentImage[MAX_FILENAME];
+    if (getCurrentMountedImage(currentImage, sizeof(currentImage))) {
+            LOGNOTE("Found image filename %s", currentImage);
+    } else {
+	    // Defaulting here lets the user get out of a hole
+            strcpy(currentImage, "image.iso");
+            LOGERR("Could not load image name, using default: %s", currentImage);
+    }
 
     fr = f_opendir(&dir, "/images");
     if (fr != FR_OK) {
@@ -220,7 +204,14 @@ THTTPStatus list_files_as_json(char *json_output, size_t max_len) {
 }
 
 THTTPStatus generate_index_page(char *output_buffer, size_t max_len) {
-    const char* currentImage = getCurrentMountedImage();
+    char currentImage[MAX_FILENAME];
+    if (getCurrentMountedImage(currentImage, sizeof(currentImage))) {
+            LOGNOTE("Found image filename %s", currentImage);
+    } else {
+            // Defaulting here lets the user get out of a hole
+            strcpy(currentImage, "image.iso");
+            LOGERR("Could not load image name, using default: %s", currentImage);
+    }
     
     char content[MAX_CONTENT_SIZE];
     snprintf(content, sizeof(content),
@@ -304,27 +295,12 @@ THTTPStatus CWebServer::GetContent (const char  *pPath,
             strncpy(pParamValue, equalSign + 1, sizeof(pParamValue) - 1);
             pParamValue[sizeof(pParamValue) - 1] = '\0';
 
-            // Write pParamValue to SD:/image.txt
-            FIL txtFile;
-            UINT bytesWritten;
-            FRESULT Result = f_open(&txtFile, "SD:/image.txt", FA_WRITE | FA_CREATE_ALWAYS);
-            if (Result != FR_OK) {
-                LOGERR("Cannot open image.txt for writing");
-                strcpy((char*)m_pContentBuffer, "");
-                nLength = 0;
-                return HTTPInternalServerError;
-            }
+	    if (!saveMountedImageName(pParamValue)) {
+		    strcpy((char*)m_pContentBuffer, "");
+		    nLength = 0;
+		    return HTTPInternalServerError;
+	    }
 
-            Result = f_write(&txtFile, pParamValue, strlen(pParamValue), &bytesWritten);
-            f_close(&txtFile);
-
-            if (Result != FR_OK || bytesWritten != strlen(pParamValue)) {
-                LOGERR("Failed to write to image.txt");
-                strcpy((char*)m_pContentBuffer, "");
-                nLength = 0;
-                return HTTPInternalServerError;
-            }
-    
             CCueBinFileDevice* cueBinFileDevice = loadCueBinFileDevice(pParamValue);
             if (!cueBinFileDevice) {
                 LOGERR("Failed to get cueBinFileDevice");
