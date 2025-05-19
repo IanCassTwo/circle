@@ -176,61 +176,6 @@ TShutdownMode CKernel::Run (void)
 	}
 
 	m_CDGadget.SetDevice (cueBinFileDevice);
-
-	/*
-	// Construct full path
-	char fullPath[160];
-	snprintf(fullPath, sizeof(fullPath), "SD:/images/%s", imageName);
-
-	// Load our image
-        FIL pFile;
-        Result = f_open (&pFile, fullPath, FA_READ);
-        if (Result != FR_OK)
-        {
-                LOGERR("Cannot open iso file for reading");
-                return ShutdownHalt;
-        }
-
-	// Is this a bin file?
-	char *cue_str = nullptr;
-	if (hasBinExtension(imageName)) {
-		// Load our cue
-		change_extension_to_cue(fullPath);
-		FIL cFile;
-		Result = f_open (&cFile, fullPath, FA_READ);
-		if (Result != FR_OK)
-		{
-			LOGERR("Cannot open iso file for reading");
-			return ShutdownHalt;
-		}
-
-		// Get file size
-		DWORD file_size = f_size(&cFile);
-
-		// Allocate buffer (+1 for null-terminator)
-		char *buffer = new char[file_size + 1];
-		if (!buffer) {
-			f_close(&cFile);
-			return ShutdownHalt;
-		}
-
-		UINT bytes_read = 0;
-		FRESULT res = f_read(&cFile, buffer, file_size, &bytes_read);
-		f_close(&cFile);
-
-		if (res != FR_OK || bytes_read != file_size) {
-			delete[] buffer;
-			return ShutdownHalt;
-		}
-		buffer[file_size] = '\0'; // null-terminate
-		cue_str = buffer;
-	}
-
-	// Start the CDROM
-	LOGNOTE("Loaded Image");
-	m_CDGadget.SetDevice (new CCueBinFileDevice(&pFile, cue_str));
-	*/
-
 	m_CDGadget.Initialize ();
 
 	bool showIP = true;

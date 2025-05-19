@@ -9,6 +9,18 @@ char tolower(char c) {
     return c;
 }
 
+bool hasCueExtension(const char* imageName) {
+    size_t len = strlen(imageName);
+    if (len >= 4) {
+        const char* ext = imageName + len - 4;
+        return tolower(ext[0]) == '.' &&
+               tolower(ext[1]) == 'c' &&
+               tolower(ext[2]) == 'u' &&
+               tolower(ext[3]) == 'e';
+    }
+    return false;
+}
+
 bool hasBinExtension(const char* imageName) {
     size_t len = strlen(imageName);
     if (len >= 4) {
@@ -21,75 +33,116 @@ bool hasBinExtension(const char* imageName) {
     return false;
 }
 
+bool hasIsoExtension(const char* imageName) {
+    size_t len = strlen(imageName);
+    if (len >= 4) {
+        const char* ext = imageName + len - 4;
+        return tolower(ext[0]) == '.' &&
+               tolower(ext[1]) == 'i' &&
+               tolower(ext[2]) == 's' &&
+               tolower(ext[3]) == 'o';
+    }
+    return false;
+}
+
+void change_extension_to_bin(char *fullPath) {
+    size_t len = strlen(fullPath);
+    //if (len >= 3 && strcmp(fullPath + len - 3, "bin") == 0) {
+    if (len >= 3) {
+        fullPath[len - 3] = 'b';
+        fullPath[len - 2] = 'i';
+        fullPath[len - 1] = 'n';
+    }
+}
+
 void change_extension_to_cue(char *fullPath) {
     size_t len = strlen(fullPath);
-    if (len >= 3 && strcmp(fullPath + len - 3, "bin") == 0) {
+    //if (len >= 3 && strcmp(fullPath + len - 3, "iso") == 0) {
+    if (len >= 3) {
         fullPath[len - 3] = 'c';
         fullPath[len - 2] = 'u';
         fullPath[len - 1] = 'e';
     }
 }
 
+bool ReadFileToString(const char* fullPath, char** out_str) {
+    if (!out_str) return false; // safeguard
+
+    FIL* file = new FIL();
+    FRESULT result = f_open(file, fullPath, FA_READ);
+    if (result != FR_OK) {
+        LOGERR("Cannot open file for reading");
+        delete file;
+        return false;
+    }
+
+    DWORD file_size = f_size(file);
+    char* buffer = new char[file_size + 1];
+    if (!buffer) {
+        f_close(file);
+        delete file;
+        return false;
+    }
+
+    UINT bytes_read = 0;
+    result = f_read(file, buffer, file_size, &bytes_read);
+    f_close(file);
+    delete file;
+
+    if (result != FR_OK || bytes_read != file_size) {
+        delete[] buffer;
+        return false;
+    }
+
+    buffer[file_size] = '\0'; // null-terminate
+    *out_str = buffer;
+    return true;
+}
+
 CCueBinFileDevice* loadCueBinFileDevice(char* imageName) {
 
     // Construct full path
-    char fullPath[160];
+    char fullPath[255]; //FIXME limits
     snprintf(fullPath, sizeof(fullPath), "SD:/images/%s", imageName);
 
-    // Load our image
-    FIL* pFile = new FIL();
-    FRESULT Result = f_open(pFile, fullPath, FA_READ);
-    if (Result != FR_OK) {
-        LOGERR("Cannot open iso file for reading");
-        delete pFile;
-        return nullptr;
-    }
-
-    // Optional CUE content
+    FIL* imageFile = new FIL();
     char* cue_str = nullptr;
 
-    if (hasBinExtension(imageName)) {
-        // Change .bin to .cue
-        change_extension_to_cue(fullPath);
-        FIL* cFile = new FIL();
-        Result = f_open(cFile, fullPath, FA_READ);
-        if (Result != FR_OK) {
-            LOGERR("Cannot open cue file for reading");
-            f_close(cFile);
-            f_close(pFile);
-            delete cFile;
-            delete pFile;
-            return nullptr;
-        }
-
-        DWORD file_size = f_size(cFile);
-        cue_str = new char[file_size + 1];
-        if (!cue_str) {
-            f_close(cFile);
-            f_close(pFile);
-            delete cFile;
-            delete pFile;
-            return nullptr;
-        }
-
-        UINT bytes_read = 0;
-        FRESULT res = f_read(cFile, cue_str, file_size, &bytes_read);
-        f_close(cFile);
-	delete cFile;
-
-        if (res != FR_OK || bytes_read != file_size) {
-            delete[] cue_str;
-            f_close(pFile);
-            delete pFile;
-            return nullptr;
-        }
-
-        cue_str[file_size] = '\0'; // null-terminate
+    // Is this a bin?
+    if (hasBinExtension(fullPath)) {
+	LOGNOTE("This is a bin file, changing to cue");
+	change_extension_to_cue(fullPath);
     }
 
-    CCueBinFileDevice* ccueBinFileDevice = new CCueBinFileDevice(pFile, cue_str);
+    // Is this a cue?
+    if (hasCueExtension(fullPath)) {
+	// Load the cue
+	LOGNOTE("This is a cue file, loading cue");
+	if (!ReadFileToString(fullPath, &cue_str)) {
+	    return nullptr;
+	}
+	LOGNOTE("Loaded cue %s", cue_str);
 
-    // CCueBinFileDevice now owns this, so clean up
+	// Load a bin file with the same name
+	change_extension_to_bin(fullPath);
+	LOGNOTE("Changed to bin %s", fullPath);
+    }
+   
+    // Load the image
+    LOGNOTE("Opening image file %s", fullPath);
+    FRESULT Result = f_open(imageFile, fullPath, FA_READ);
+    if (Result != FR_OK) {
+	LOGERR("Cannot open image file for reading");
+	delete imageFile;
+	return nullptr;
+    }
+
+    LOGNOTE("Opened image file %s", fullPath);
+        
+    // Create our device
+    CCueBinFileDevice* ccueBinFileDevice = new CCueBinFileDevice(imageFile, cue_str);
+
+    // Cleanup
     if (cue_str != nullptr)
     	delete[] cue_str;
 
