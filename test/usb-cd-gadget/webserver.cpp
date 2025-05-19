@@ -23,9 +23,51 @@
 #include "util.h"
 #include <assert.h>
 
-#define MAX_CONTENT_SIZE        8192
+#define MAX_CONTENT_SIZE        16384
 #define MAX_FILES       255
 #define MAX_FILENAME    64
+#define VERSION         "2.0.0"
+
+// HTML template with CSS styling embedded
+static const char HTML_LAYOUT[] = 
+    "<!DOCTYPE html>\n"
+    "<html>\n"
+    "<head>\n"
+    "    <title>USBODE - USB Optical Drive Emulator</title>\n"
+    "    <style>\n"
+    "        body {background-color: #EAEAEA; color: #333333; font-family: \"Times New Roman\", serif; margin: 0; padding: 0;}\n"
+    "        h1, h2, h3 {color: #1E4D8C;}\n"
+    "        a {color: #0066CC;}\n"
+    "        a:visited {color: #0066CC;}\n"
+    "        .container {width: 100%%; margin: 0; padding: 0;}\n"
+    "        .header {background-color: #3A7CA5; padding: 10px; text-align: center; color: #FFFFFF;}\n"
+    "        .header h1, .header h2 {color: #FFFFFF; margin: 5px 0;}\n"
+    "        .content {padding: 10px; background-color: #FFFFFF; min-height: 300px;}\n"
+    "        .footer {background-color: #3A7CA5; padding: 10px; text-align: center; color: #FFFFFF;}\n"
+    "        .button {background-color: #4CAF50; padding: 7px 15px; text-decoration: none; color: #FFFFFF; margin: 5px; display: inline-block;}\n"
+    "        .info-box {background-color: #F5F5F5; padding: 10px; margin: 10px 0;}\n"
+    "        .warning {background-color: #FFDDDD; padding: 10px; margin: 10px 0; color: #990000;}\n"
+    "        .file-link {padding: 8px; margin: 5px 0; display: block; font-size: 16px;}\n"
+    "        .file-link-even {background-color: #E3F2FD;}\n"
+    "        .file-link-odd {background-color: #BBDEFB;}\n"
+    "        .header-bar {background-color: #2C5F7C; color: #FFFFFF; padding: 5px;}\n"
+    "    </style>\n"
+    "</head>\n"
+    "<body>\n"
+    "    <div class=\"container\">\n"
+    "        <div class=\"header\">\n"
+    "            <h1>USBODE</h1>\n"
+    "            <h2>USB Optical Drive Emulator</h2>\n"
+    "        </div>\n"
+    "        <div class=\"content\">\n"
+    "            %s\n"
+    "        </div>\n"
+    "        <div class=\"footer\">\n"
+    "            <p>Version %s</p>\n"
+    "        </div>\n"
+    "    </div>\n"
+    "</body>\n"
+    "</html>";
 
 static const u8 s_Index[] =
 #include "index.h"
@@ -38,7 +80,7 @@ static const char FromWebServer[] = "webserver";
 CWebServer::CWebServer (CNetSubSystem *pNetSubSystem, CUSBCDGadget *pCDGadget, CActLED *pActLED, CSocket *pSocket)
 :       CHTTPDaemon (pNetSubSystem, pSocket, MAX_CONTENT_SIZE),
         m_pActLED (pActLED),
-	m_pCDGadget (pCDGadget)
+    m_pCDGadget (pCDGadget)
 {
 }
 
@@ -50,6 +92,87 @@ CWebServer::~CWebServer (void)
 CHTTPDaemon *CWebServer::CreateWorker (CNetSubSystem *pNetSubSystem, CSocket *pSocket)
 {
         return new CWebServer (pNetSubSystem, m_pCDGadget, m_pActLED, pSocket);
+}
+
+const char* getCurrentMountedImage() {
+    static char buffer[MAX_FILENAME];
+    FIL txtFile;
+    UINT bytesRead = 0;
+    
+    FRESULT Result = f_open(&txtFile, "SD:/image.txt", FA_READ);
+    if (Result != FR_OK) {
+        strcpy(buffer, "None");
+        return buffer;
+    }
+    
+    Result = f_read(&txtFile, buffer, sizeof(buffer) - 1, &bytesRead);
+    f_close(&txtFile);
+    
+    if (Result != FR_OK) {
+        strcpy(buffer, "Unknown");
+        return buffer;
+    }
+    
+    buffer[bytesRead] = '\0';
+    return buffer;
+}
+
+THTTPStatus list_files_as_table(char *output_buffer, size_t max_len) {
+    DIR dir;
+    FILINFO fno;
+    FRESULT fr;
+    char content[MAX_CONTENT_SIZE];
+    size_t offset = 0;
+    const char* currentImage = getCurrentMountedImage();
+
+    fr = f_opendir(&dir, "/images");
+    if (fr != FR_OK) {
+        snprintf(output_buffer, max_len, "Error opening directory: %d", fr);
+        return HTTPInternalServerError;
+    }
+
+    offset += snprintf(content + offset, sizeof(content) - offset,
+        "<h3>File Selection</h3>\n"
+        "<div class=\"info-box\">\n"
+        "    <p>Current File Loaded: <strong>%s</strong></p>\n"
+        "    <p>To load a different ISO, select it. No disconnection between the OS and the USBODE will occur.</p>\n"
+        "</div>\n"
+        "<h4>Available Files:</h4>\n", 
+        currentImage);
+
+    int index = 0;
+    while (1) {
+        fr = f_readdir(&dir, &fno);
+        if (fr != FR_OK || fno.fname[0] == 0) break;
+
+        // Skip "." and ".."
+        if (fno.fname[0] == '.' && (fno.fname[1] == 0 || (fno.fname[1] == '.' && fno.fname[2] == 0))) {
+            continue;
+        }
+
+        // Add file with alternating row colors
+        const char* rowClass = (index % 2 == 0) ? "file-link-even" : "file-link-odd";
+        offset += snprintf(content + offset, sizeof(content) - offset, 
+            "<div class=\"file-link %s\"><a href=\"/mount?file=%s\">%s</a></div>\n", 
+            rowClass, fno.fname, fno.fname);
+        index++;
+
+        if (offset >= sizeof(content) - MAX_FILENAME - 100) {  // prevent overflow
+            offset += snprintf(content + offset, sizeof(content) - offset, "<p>Too many files to display completely</p>");
+            break;
+        }
+    }
+
+    offset += snprintf(content + offset, sizeof(content) - offset,
+        "<div>\n"
+        "    <a class=\"button\" href=\"/\">Return to Homepage</a>\n"
+        "</div>");
+
+    f_closedir(&dir);
+    
+    // Format the complete HTML page using the layout template
+    snprintf(output_buffer, max_len, HTML_LAYOUT, content, VERSION);
+    return HTTPOK;
 }
 
 THTTPStatus list_files_as_json(char *json_output, size_t max_len) {
@@ -94,6 +217,45 @@ THTTPStatus list_files_as_json(char *json_output, size_t max_len) {
     return HTTPOK;
 }
 
+THTTPStatus generate_index_page(char *output_buffer, size_t max_len) {
+    const char* currentImage = getCurrentMountedImage();
+    
+    char content[MAX_CONTENT_SIZE];
+    snprintf(content, sizeof(content),
+        "<h3>Welcome to USBODE</h3>\n"
+        "<div class=\"info-box\">\n"
+        "    <p>Currently Serving: <strong>%s</strong></p>\n"
+        "</div>\n"
+        "\n"
+        "<div>\n"
+        "    <a class=\"button\" href=\"/list\">Load Another Image</a>\n"
+        "</div>",
+        currentImage);
+    
+    // Format the complete HTML page using the layout template
+    snprintf(output_buffer, max_len, HTML_LAYOUT, content, VERSION);
+    return HTTPOK;
+}
+
+THTTPStatus generate_mount_success_page(char *output_buffer, size_t max_len, const char *filename) {
+    char content[MAX_CONTENT_SIZE];
+    snprintf(content, sizeof(content),
+        "<h3>Mounting File</h3>\n"
+        "<div class=\"info-box\">\n"
+        "    <p>Successfully mounted: <strong>%s</strong></p>\n"
+        "</div>\n"
+        "\n"
+        "<div>\n"
+        "    <a class=\"button\" href=\"/\">Return to Homepage</a>\n"
+        "    <a class=\"button\" href=\"/list\">Select Another File</a>\n"
+        "</div>",
+        filename);
+    
+    // Format the complete HTML page using the layout template
+    snprintf(output_buffer, max_len, HTML_LAYOUT, content, VERSION);
+    return HTTPOK;
+}
+
 THTTPStatus CWebServer::GetContent (const char  *pPath,
                                     const char  *pParams,
                                     const char  *pFormData,
@@ -108,75 +270,137 @@ THTTPStatus CWebServer::GetContent (const char  *pPath,
         CString String;
         const u8 *pContent = 0;
         unsigned nLength = 0;
-	THTTPStatus resultCode = HTTPOK;
+    THTTPStatus resultCode = HTTPOK;
 
-	LOGNOTE("Params is %s", pParams);
+    LOGNOTE("Path: %s, Params: %s", pPath, pParams ? pParams : "");
 
-	if ((strcmp (pPath, "/") == 0 || strcmp (pPath, "/index.html") == 0))
+    if ((strcmp (pPath, "/") == 0 || strcmp (pPath, "/index.html") == 0))
         {
-		// GET the index page
-                pContent = s_Index;
-                nLength = sizeof s_Index-1;
-                *ppContentType = "text/html; charset=iso-8859-1";
+                // Generate the index page with the HTML template
+                char index_page[MAX_CONTENT_SIZE];
+                resultCode = generate_index_page(index_page, sizeof(index_page));
+                pContent = (const u8*)index_page;
+                nLength = strlen((char*)pContent);
+                *ppContentType = "text/html; charset=utf-8";
         } 
-	else if (strcmp (pPath, "/controller") == 0 && (strcmp (pParams, "list") == 0)) 
-	{ 
-		// List our images
-		char json_output[MAX_CONTENT_SIZE];
-		resultCode = list_files_as_json(json_output, MAX_CONTENT_SIZE);
+        else if (strcmp (pPath, "/list") == 0) 
+        { 
+                // List images with HTML table formatting
+                char html_output[MAX_CONTENT_SIZE];
+                resultCode = list_files_as_table(html_output, MAX_CONTENT_SIZE);
+                pContent = (const u8*)html_output;
+                nLength = strlen((char*)pContent);
+                *ppContentType = "text/html; charset=utf-8";
+        }
+    else if (strcmp (pPath, "/api/list") == 0) 
+    { 
+        // List our images in JSON format (keep API endpoint for compatibility)
+        char json_output[MAX_CONTENT_SIZE];
+        resultCode = list_files_as_json(json_output, MAX_CONTENT_SIZE);
                 pContent = (const u8*)json_output;
                 nLength = strlen((char*)json_output);
-                *ppContentType = "application/json; charset=iso-8859-1";
-	} 
-	else if (strcmp (pPath, "/controller") == 0 && (strncmp (pParams, "mount=", 6) == 0)) 
-	{ 
-		// Extract value (after '=')
-		char pParamValue[256];
-		const char* equalSign = strchr(pParams, '=');
-		if (equalSign && *(equalSign + 1) != '\0') {
-			strncpy(pParamValue, equalSign + 1, sizeof(pParamValue) - 1);
-			pParamValue[sizeof(pParamValue) - 1] = '\0';
+                *ppContentType = "application/json; charset=utf-8";
+    } 
+    else if (strcmp (pPath, "/mount") == 0 && pParams && strncmp (pParams, "file=", 5) == 0) 
+    { 
+        // Extract value (after '=')
+        char pParamValue[256];
+        const char* equalSign = strchr(pParams, '=');
+        if (equalSign && *(equalSign + 1) != '\0') {
+            strncpy(pParamValue, equalSign + 1, sizeof(pParamValue) - 1);
+            pParamValue[sizeof(pParamValue) - 1] = '\0';
 
-			// Write pParamValue to SD:/image.txt
-			FIL txtFile;
-			UINT bytesWritten;
-			FRESULT Result = f_open(&txtFile, "SD:/image.txt", FA_WRITE | FA_CREATE_ALWAYS);
-			if (Result != FR_OK) {
-				LOGERR("Cannot open image.txt for writing");
-				pContent = (const u8*)"";
-				nLength = 0;
-				return HTTPInternalServerError;
-			}
+            // Write pParamValue to SD:/image.txt
+            FIL txtFile;
+            UINT bytesWritten;
+            FRESULT Result = f_open(&txtFile, "SD:/image.txt", FA_WRITE | FA_CREATE_ALWAYS);
+            if (Result != FR_OK) {
+                LOGERR("Cannot open image.txt for writing");
+                pContent = (const u8*)"";
+                nLength = 0;
+                return HTTPInternalServerError;
+            }
 
-			Result = f_write(&txtFile, pParamValue, strlen(pParamValue), &bytesWritten);
-			f_close(&txtFile);
+            Result = f_write(&txtFile, pParamValue, strlen(pParamValue), &bytesWritten);
+            f_close(&txtFile);
 
-			if (Result != FR_OK || bytesWritten != strlen(pParamValue)) {
-				LOGERR("Failed to write to image.txt");
-				pContent = (const u8*)"";
-				nLength = 0;
-				return HTTPInternalServerError;
-			}
+            if (Result != FR_OK || bytesWritten != strlen(pParamValue)) {
+                LOGERR("Failed to write to image.txt");
+                pContent = (const u8*)"";
+                nLength = 0;
+                return HTTPInternalServerError;
+            }
     
-			CCueBinFileDevice* cueBinFileDevice = loadCueBinFileDevice(pParamValue);
-			if (!cueBinFileDevice) {
-				LOGERR("Failed to get cueBinFileDevice");
-				return HTTPInternalServerError;
-			}
+            CCueBinFileDevice* cueBinFileDevice = loadCueBinFileDevice(pParamValue);
+            if (!cueBinFileDevice) {
+                LOGERR("Failed to get cueBinFileDevice");
+                return HTTPInternalServerError;
+            }
 
-			m_pCDGadget->SetDevice (cueBinFileDevice);
-			pContent = (const u8*)"{\"status\": \"OK\"}";
-			nLength = 16;
-			*ppContentType = "application/json; charset=iso-8859-1";
-		} else {
-			    LOGERR("mount value is missing");
-			    pContent = (const u8*)"mount value is missing";
-			    nLength = 22;
-			    return HTTPBadRequest;
-		}
+            m_pCDGadget->SetDevice(cueBinFileDevice);
+            
+            // Generate a success page
+            char mount_page[MAX_CONTENT_SIZE];
+            resultCode = generate_mount_success_page(mount_page, sizeof(mount_page), pParamValue);
+            pContent = (const u8*)mount_page;
+            nLength = strlen((char*)pContent);
+            *ppContentType = "text/html; charset=utf-8";
+        } else {
+            LOGERR("mount file value is missing");
+            pContent = (const u8*)"mount file value is missing";
+            nLength = 28;
+            return HTTPBadRequest;
+        }
+    }
+    // Keep the API JSON endpoint for compatibility
+    else if (strcmp (pPath, "/controller") == 0 && (strncmp (pParams, "mount=", 6) == 0)) 
+    { 
+        // Extract value (after '=')
+        char pParamValue[256];
+        const char* equalSign = strchr(pParams, '=');
+        if (equalSign && *(equalSign + 1) != '\0') {
+            strncpy(pParamValue, equalSign + 1, sizeof(pParamValue) - 1);
+            pParamValue[sizeof(pParamValue) - 1] = '\0';
 
-	}
-	else
+            // Write pParamValue to SD:/image.txt
+            FIL txtFile;
+            UINT bytesWritten;
+            FRESULT Result = f_open(&txtFile, "SD:/image.txt", FA_WRITE | FA_CREATE_ALWAYS);
+            if (Result != FR_OK) {
+                LOGERR("Cannot open image.txt for writing");
+                pContent = (const u8*)"";
+                nLength = 0;
+                return HTTPInternalServerError;
+            }
+
+            Result = f_write(&txtFile, pParamValue, strlen(pParamValue), &bytesWritten);
+            f_close(&txtFile);
+
+            if (Result != FR_OK || bytesWritten != strlen(pParamValue)) {
+                LOGERR("Failed to write to image.txt");
+                pContent = (const u8*)"";
+                nLength = 0;
+                return HTTPInternalServerError;
+            }
+    
+            CCueBinFileDevice* cueBinFileDevice = loadCueBinFileDevice(pParamValue);
+            if (!cueBinFileDevice) {
+                LOGERR("Failed to get cueBinFileDevice");
+                return HTTPInternalServerError;
+            }
+
+            m_pCDGadget->SetDevice(cueBinFileDevice);
+            pContent = (const u8*)"{\"status\": \"OK\"}";
+            nLength = 16;
+            *ppContentType = "application/json; charset=iso-8859-1";
+        } else {
+            LOGERR("mount value is missing");
+            pContent = (const u8*)"mount value is missing";
+            nLength = 22;
+            return HTTPBadRequest;
+        }
+    }
+    else
         {
                 return HTTPNotFound;
         }
