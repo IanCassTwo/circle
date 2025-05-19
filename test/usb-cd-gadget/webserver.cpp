@@ -80,13 +80,15 @@ static const char FromWebServer[] = "webserver";
 CWebServer::CWebServer (CNetSubSystem *pNetSubSystem, CUSBCDGadget *pCDGadget, CActLED *pActLED, CSocket *pSocket)
 :       CHTTPDaemon (pNetSubSystem, pSocket, MAX_CONTENT_SIZE),
         m_pActLED (pActLED),
-    m_pCDGadget (pCDGadget)
+        m_pCDGadget (pCDGadget),
+        m_pContentBuffer(new u8[MAX_CONTENT_SIZE])
 {
 }
 
 CWebServer::~CWebServer (void)
 {
         m_pActLED = 0;
+        delete[] m_pContentBuffer;
 }
 
 CHTTPDaemon *CWebServer::CreateWorker (CNetSubSystem *pNetSubSystem, CSocket *pSocket)
@@ -263,43 +265,35 @@ THTTPStatus CWebServer::GetContent (const char  *pPath,
                                     unsigned    *pLength,
                                     const char **ppContentType)
 {
-        assert (pPath != 0);
-        assert (ppContentType != 0);
-        assert (m_pActLED != 0);
+    assert (pPath != 0);
+    assert (ppContentType != 0);
+    assert (m_pActLED != 0);
 
-        CString String;
-        const u8 *pContent = 0;
-        unsigned nLength = 0;
     THTTPStatus resultCode = HTTPOK;
+    unsigned nLength = 0;
 
     LOGNOTE("Path: %s, Params: %s", pPath, pParams ? pParams : "");
 
     if ((strcmp (pPath, "/") == 0 || strcmp (pPath, "/index.html") == 0))
-        {
-                // Generate the index page with the HTML template
-                char index_page[MAX_CONTENT_SIZE];
-                resultCode = generate_index_page(index_page, sizeof(index_page));
-                pContent = (const u8*)index_page;
-                nLength = strlen((char*)pContent);
-                *ppContentType = "text/html; charset=utf-8";
-        } 
-        else if (strcmp (pPath, "/list") == 0) 
-        { 
-                // List images with HTML table formatting
-                char html_output[MAX_CONTENT_SIZE];
-                resultCode = list_files_as_table(html_output, MAX_CONTENT_SIZE);
-                pContent = (const u8*)html_output;
-                nLength = strlen((char*)pContent);
-                *ppContentType = "text/html; charset=utf-8";
-        }
+    {
+        // Generate the index page with the HTML template
+        resultCode = generate_index_page((char*)m_pContentBuffer, MAX_CONTENT_SIZE);
+        nLength = strlen((char*)m_pContentBuffer);
+        *ppContentType = "text/html; charset=utf-8";
+    } 
+    else if (strcmp (pPath, "/list") == 0) 
+    { 
+        // List images with HTML table formatting
+        resultCode = list_files_as_table((char*)m_pContentBuffer, MAX_CONTENT_SIZE);
+        nLength = strlen((char*)m_pContentBuffer);
+        *ppContentType = "text/html; charset=utf-8";
+    }
     else if (strcmp (pPath, "/api/list") == 0) 
     { 
         // List our images in JSON format (keep API endpoint for compatibility)
-        char json_output[MAX_CONTENT_SIZE];
-        resultCode = list_files_as_json(json_output, MAX_CONTENT_SIZE);
-                pContent = (const u8*)json_output;
-                nLength = strlen((char*)json_output);
-                *ppContentType = "application/json; charset=utf-8";
+        resultCode = list_files_as_json((char*)m_pContentBuffer, MAX_CONTENT_SIZE);
+        nLength = strlen((char*)m_pContentBuffer);
+        *ppContentType = "application/json; charset=utf-8";
     } 
     else if (strcmp (pPath, "/mount") == 0 && pParams && strncmp (pParams, "file=", 5) == 0) 
     { 
@@ -316,7 +310,7 @@ THTTPStatus CWebServer::GetContent (const char  *pPath,
             FRESULT Result = f_open(&txtFile, "SD:/image.txt", FA_WRITE | FA_CREATE_ALWAYS);
             if (Result != FR_OK) {
                 LOGERR("Cannot open image.txt for writing");
-                pContent = (const u8*)"";
+                strcpy((char*)m_pContentBuffer, "");
                 nLength = 0;
                 return HTTPInternalServerError;
             }
@@ -326,7 +320,7 @@ THTTPStatus CWebServer::GetContent (const char  *pPath,
 
             if (Result != FR_OK || bytesWritten != strlen(pParamValue)) {
                 LOGERR("Failed to write to image.txt");
-                pContent = (const u8*)"";
+                strcpy((char*)m_pContentBuffer, "");
                 nLength = 0;
                 return HTTPInternalServerError;
             }
@@ -340,14 +334,12 @@ THTTPStatus CWebServer::GetContent (const char  *pPath,
             m_pCDGadget->SetDevice(cueBinFileDevice);
             
             // Generate a success page
-            char mount_page[MAX_CONTENT_SIZE];
-            resultCode = generate_mount_success_page(mount_page, sizeof(mount_page), pParamValue);
-            pContent = (const u8*)mount_page;
-            nLength = strlen((char*)pContent);
+            resultCode = generate_mount_success_page((char*)m_pContentBuffer, MAX_CONTENT_SIZE, pParamValue);
+            nLength = strlen((char*)m_pContentBuffer);
             *ppContentType = "text/html; charset=utf-8";
         } else {
             LOGERR("mount file value is missing");
-            pContent = (const u8*)"mount file value is missing";
+            strcpy((char*)m_pContentBuffer, "mount file value is missing");
             nLength = 28;
             return HTTPBadRequest;
         }
@@ -368,7 +360,7 @@ THTTPStatus CWebServer::GetContent (const char  *pPath,
             FRESULT Result = f_open(&txtFile, "SD:/image.txt", FA_WRITE | FA_CREATE_ALWAYS);
             if (Result != FR_OK) {
                 LOGERR("Cannot open image.txt for writing");
-                pContent = (const u8*)"";
+                strcpy((char*)m_pContentBuffer, "");
                 nLength = 0;
                 return HTTPInternalServerError;
             }
@@ -378,7 +370,7 @@ THTTPStatus CWebServer::GetContent (const char  *pPath,
 
             if (Result != FR_OK || bytesWritten != strlen(pParamValue)) {
                 LOGERR("Failed to write to image.txt");
-                pContent = (const u8*)"";
+                strcpy((char*)m_pContentBuffer, "");
                 nLength = 0;
                 return HTTPInternalServerError;
             }
@@ -390,34 +382,33 @@ THTTPStatus CWebServer::GetContent (const char  *pPath,
             }
 
             m_pCDGadget->SetDevice(cueBinFileDevice);
-            pContent = (const u8*)"{\"status\": \"OK\"}";
+            strcpy((char*)m_pContentBuffer, "{\"status\": \"OK\"}");
             nLength = 16;
             *ppContentType = "application/json; charset=iso-8859-1";
         } else {
             LOGERR("mount value is missing");
-            pContent = (const u8*)"mount value is missing";
+            strcpy((char*)m_pContentBuffer, "mount value is missing");
             nLength = 22;
             return HTTPBadRequest;
         }
     }
     else
-        {
-                return HTTPNotFound;
-        }
+    {
+        return HTTPNotFound;
+    }
 
-        assert (pLength != 0);
-        if (*pLength < nLength)
-        {
-                LOGERR("Increase MAX_CONTENT_SIZE to at least %u", nLength);
-                return HTTPInternalServerError;
-        }
+    assert (pLength != 0);
+    if (*pLength < nLength)
+    {
+        LOGERR("Increase MAX_CONTENT_SIZE to at least %u", nLength);
+        return HTTPInternalServerError;
+    }
 
-        assert (pBuffer != 0);
-        assert (pContent != 0);
-        assert (nLength > 0);
-        memcpy (pBuffer, pContent, nLength);
+    assert (pBuffer != 0);
+    assert (nLength > 0);
+    memcpy (pBuffer, m_pContentBuffer, nLength);
 
-        *pLength = nLength;
+    *pLength = nLength;
 
-        return resultCode;
+    return resultCode;
 }

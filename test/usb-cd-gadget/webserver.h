@@ -30,27 +30,25 @@
 class CWebServer : public CHTTPDaemon
 {
 public:
-        CWebServer (CNetSubSystem *pNetSubSystem,
-		CUSBCDGadget *pCDGadget,
-                    CActLED       *pActLED,                     // the LED to be controlled
-                    CSocket       *pSocket = 0);                // is 0 for 1st created instance (listener)
-        ~CWebServer (void);
+    CWebServer (CNetSubSystem *pNetSubSystem, CUSBCDGadget *pCDGadget, CActLED *pActLED, CSocket *pSocket = 0);
+    ~CWebServer (void);
 
-        // creates an instance of our derived webserver class
-        CHTTPDaemon *CreateWorker (CNetSubSystem *pNetSubSystem, CSocket *pSocket);
-
-        // provides our content
-        THTTPStatus GetContent (const char  *pPath,             // path of the file to be sent
-                                const char  *pParams,           // parameters to GET ("" for none)
-                                const char  *pFormData,         // form data from POST ("" for none)
-                                u8          *pBuffer,           // copy your content here
-                                unsigned    *pLength,           // in: buffer size, out: content length
-                                const char **ppContentType);    // set this if not "text/html"
+    // from CHTTPDaemon
+    CHTTPDaemon *CreateWorker (CNetSubSystem *pNetSubSystem, CSocket *pSocket);
 
 private:
-        CActLED *m_pActLED;
-        CUSBCDGadget *m_pCDGadget;
-	boolean SetDevice(char *imageName);
+    // from CHTTPDaemon
+    THTTPStatus GetContent (const char  *pPath,
+                          const char  *pParams,
+                          const char  *pFormData,
+                          u8          *pBuffer,
+                          unsigned    *pLength,
+                          const char **ppContentType);
+    
+private:
+    CActLED *m_pActLED;
+    CUSBCDGadget *m_pCDGadget;
+    u8 *m_pContentBuffer;    // Added content buffer as class member
 };
 
 #endif
