@@ -15,6 +15,9 @@ make
 cd ${projectRoot}/addon/linux
 make clean
 make
+cd ${projectRoot}/addon/cueparser
+make clean
+make
 cd ${projectRoot}/addon/fatfs
 make clean
 make
