@@ -212,9 +212,33 @@ void CUSBCDGadget::SetDevice (CCueBinFileDevice* dev)
 	while ((trackInfo = cueParser.next_track()) != nullptr) {
 	    MLOGNOTE ("CUSBCDGadget::InitDeviceSize", "At track number = %d, data_start = %d", trackInfo->track_number, trackInfo->data_start);
 	    lastTrackInfo = trackInfo;
-	    if (track == 0)
-	    	MLOGNOTE ("CUSBCDGadget::InitDeviceSize", "Track zero block size is %lu", trackInfo->sector_length);
-		block_size = trackInfo->sector_length;
+
+	    // We're assuming the first track is the data track
+	    if (track == 0) {
+		switch(trackInfo->track_mode) {
+	    		case CUETrack_MODE1_2048:
+	    			MLOGNOTE ("CUSBCDGadget::InitDeviceSize", "CUETrack_MODE1_2048");
+				skip_bytes = 0;
+	    			block_size = 2048;
+				file_mode = 1;
+				break;
+	    		case CUETrack_MODE1_2352:
+	    			MLOGNOTE ("CUSBCDGadget::InitDeviceSize", "CUETrack_MODE1_2352");
+				skip_bytes = 16;
+	    			block_size = 2352;
+				file_mode = 1;
+				break;
+	    		case CUETrack_MODE2_2352:
+	    			MLOGNOTE ("CUSBCDGadget::InitDeviceSize", "CUETrack_MODE2_2352");
+				skip_bytes = 24;
+	    			block_size = 2352;
+				file_mode = 2;
+				break;
+			default:
+	    			MLOGERR ("CUSBCDGadget::InitDeviceSize", "Track mode %d not handled", trackInfo->track_mode);
+				break;
+		}
+	    }
 	    track++;
 	}
 
@@ -412,7 +436,7 @@ u32 CUSBCDGadget::getLeadOutLBA(const CUETrackInfo* lasttrack)
 {
     u64 lastTrackBlocks = (m_pDevice->GetSize() - lasttrack->file_offset) / lasttrack->sector_length;
     u32 ret = lasttrack->data_start + lastTrackBlocks;
-    MLOGNOTE ("CUSBCDGadget::getLeadOutLBA", "device size is %llu, last track file offset is %llu, last track sector_length is %lu, last track data_start is %lu, lastTrackBlocks = %lu, returning = %lu", m_pDevice->GetSize(), lasttrack->file_offset, lasttrack->sector_length, lasttrack->data_start, lastTrackBlocks, ret);
+    //MLOGNOTE ("CUSBCDGadget::getLeadOutLBA", "device size is %llu, last track file offset is %llu, last track sector_length is %lu, last track data_start is %lu, lastTrackBlocks = %lu, returning = %lu", m_pDevice->GetSize(), lasttrack->file_offset, lasttrack->sector_length, lasttrack->data_start, lastTrackBlocks, ret);
     return ret;
 }
 
@@ -659,7 +683,7 @@ void CUSBCDGadget::HandleSCSICommand()
 			int startingTrack = m_CBW.CBWCB[5];
 			int allocationLength = (m_CBW.CBWCB[7] << 8) | m_CBW.CBWCB[8];
 
-	                MLOGNOTE ("CUSBCDGadget::HandleSCSICommand", "Read TOC with msf = %02x, starting track = %d, allocation length = %d, m_CDReady = %d", msf, startingTrack, allocationLength, m_CDReady);
+	                //MLOGNOTE ("CUSBCDGadget::HandleSCSICommand", "Read TOC with msf = %02x, starting track = %d, allocation length = %d, m_CDReady = %d", msf, startingTrack, allocationLength, m_CDReady);
 
                         TUSBTOCData m_TOCData;
 			TUSBTOCEntry* tocEntries;
@@ -934,21 +958,10 @@ void CUSBCDGadget::Update()
 					m_nbyteCount-=readCount;
 					m_nState=TCDState::DataIn;
 
-					//FIXME
-					if (block_size == 2352)
-					{
-						// ISO 2048 bytes start at offset 16 (skip 12 sync + 4 header bytes)
-						m_pEP[EPIn]->BeginTransfer(CUSBCDGadgetEndpoint::TransferDataIn,
-								   m_InBuffer + 16, 2048);
-					}
-					else
-					{
-						m_pEP[EPIn]->BeginTransfer(CUSBCDGadgetEndpoint::TransferDataIn,
-								   m_InBuffer, readCount);
-					}
-
-				//	m_pEP[EPIn]->BeginTransfer(CUSBCDGadgetEndpoint::TransferDataIn,
-				//	                           m_InBuffer,readCount);
+					// FIXME This assumes we're sending data...
+					// We always need to send 2048 bytes but perhaps there's some to skip
+					m_pEP[EPIn]->BeginTransfer(CUSBCDGadgetEndpoint::TransferDataIn,
+								   m_InBuffer + skip_bytes, 2048);
 				}
 			}
 			if(!m_CDReady || offset==(u64)(-1))

@@ -453,7 +453,9 @@ private:
 	u8 bmCSWStatus = 0;
 	u8 bSenseKey = 0;
         u8 bAddlSenseCode = 0;
+	int skip_bytes = 0;
 	int block_size = 2048;
+	int file_mode = 1;
 };
 
 #endif
