@@ -201,28 +201,29 @@ void CUSBCDGadget::SetDevice (CCueBinFileDevice* dev)
 	MLOGNOTE ("CUSBCDGadget::SetDevice", "cuesheet is %s", m_pDevice->GetCueSheet());
 	cueParser = CUEParser(m_pDevice->GetCueSheet()); //FIXME. Ensure cuesheet is not null or empty
 
-	/*
-	u64 devSize=dev->GetSize();
-	if(devSize==(u64)-1)MLOGERR("SetDevice","Device size not reported");
-	u64 blocks = devSize/BLOCK_SIZE;
-	MLOGNOTE("CUSBCDGadget::SetDevice","Size is %d, Blocks are %llu", devSize, blocks);
-	*/
-
 	MLOGNOTE ("CUSBCDGadget::InitDevice", "entered");
 
-	// FIXME Extract getleadoutLBA into method of its own
+	// TODO Extract getleadoutLBA into method of its own
+	// TODO Extract getDataSectorSize into a method of its own
 	const CUETrackInfo* trackInfo = nullptr;
 	const CUETrackInfo* lastTrackInfo = nullptr;
+	int track = 0;
 	cueParser.restart();
 	while ((trackInfo = cueParser.next_track()) != nullptr) {
 	    MLOGNOTE ("CUSBCDGadget::InitDeviceSize", "At track number = %d, data_start = %d", trackInfo->track_number, trackInfo->data_start);
 	    lastTrackInfo = trackInfo;
+	    if (track == 0)
+	    	MLOGNOTE ("CUSBCDGadget::InitDeviceSize", "Track zero block size is %lu", trackInfo->sector_length);
+		block_size = trackInfo->sector_length;
+	    track++;
 	}
+
 	u32 leadOutLBA = getLeadOutLBA(lastTrackInfo);
-	m_ReadCapReply.nLastBlockAddr = htonl(leadOutLBA) - 1; // this value is the Start address of last recorded lead-out minus 1
-	//m_FormatCapReply.numBlocks = htonl(leadOutLBA);
+
+	m_ReadCapReply.nLastBlockAddr = htonl(leadOutLBA - 1); // this value is the Start address of last recorded lead-out minus 1
         m_DiscInfoReply.last_possible_lead_out = htonl(leadOutLBA);
 	m_CDReady = true;
+	MLOGNOTE("CUSBCDGadget::InitDeviceSize", "Block size is %d, leadOutLBA is %d, m_CDReady = %d", block_size, leadOutLBA, m_CDReady);
 }
 
 /*
@@ -377,25 +378,6 @@ void CUSBCDGadget::OnTransferComplete (boolean bIn, size_t nLength)
 				} // TODO: response for not meaningful CBW
 				break;
 			}
-		case TCDState::DataOut:
-			{
-				//process block from host
-				assert(m_nnumber_blocks>0);
-				if(m_CDReady)
-				{
-					m_nState=TCDState::DataOutWrite; //see Update function
-				}
-				else
-				{
-					MLOGERR("onXferCmplt DataOut","failed, %s",
-					        m_CDReady?"ready":"not ready");
-					m_CSW.bmCSWStatus=CD_CSW_STATUS_FAIL;
-					m_ReqSenseReply.bSenseKey = 2;
-					m_ReqSenseReply.bAddlSenseCode = 1;
-					SendCSW();
-				}
-				break;
-			}
 
 		default:
 			{
@@ -425,11 +407,13 @@ void CUSBCDGadget::SendCSW()
 }
 
 
+//FIXME This doesn't seem to work when we have audio tracks
 u32 CUSBCDGadget::getLeadOutLBA(const CUETrackInfo* lasttrack)
 {
-	
-    u32 lastTrackBlocks = (m_pDevice->GetSize() - lasttrack->file_offset) / lasttrack->sector_length;
-    return lasttrack->data_start + lastTrackBlocks;
+    u64 lastTrackBlocks = (m_pDevice->GetSize() - lasttrack->file_offset) / lasttrack->sector_length;
+    u32 ret = lasttrack->data_start + lastTrackBlocks;
+    MLOGNOTE ("CUSBCDGadget::getLeadOutLBA", "device size is %llu, last track file offset is %llu, last track sector_length is %lu, last track data_start is %lu, lastTrackBlocks = %lu, returning = %lu", m_pDevice->GetSize(), lasttrack->file_offset, lasttrack->sector_length, lasttrack->data_start, lastTrackBlocks, ret);
+    return ret;
 }
 
 u32 CUSBCDGadget::lba_to_msf(u32 lba) {
@@ -621,48 +605,36 @@ void CUSBCDGadget::HandleSCSICommand()
 				m_CSW.bmCSWStatus = bmCSWStatus;
 				m_ReqSenseReply.bSenseKey = bSenseKey;
 				m_ReqSenseReply.bAddlSenseCode = bAddlSenseCode;
-				m_nnumber_blocks = (u32)((m_CBW.CBWCB[7] << 8) | m_CBW.CBWCB[8]);
+
+				// We know how many blocks to read and where to start
+				// However, we still need to work out what actual bytes to 
+				// read from storage. The underlying disk image might be
+				// 2352 bytes per sector so we need to extract the 2048
+				// bytes to return here
+
+				// Where to start reading (LBA)
 				m_nblock_address =   (u32)(m_CBW.CBWCB[2] << 24)
 				                   | (u32)(m_CBW.CBWCB[3] << 16)
 				                   | (u32)(m_CBW.CBWCB[4] << 8) | m_CBW.CBWCB[5];
+
+				// Number of blocks to read (LBA)
+				m_nnumber_blocks = (u32)((m_CBW.CBWCB[7] << 8) | m_CBW.CBWCB[8]);
+
+				// TODO check if the requested LBA is within track 1 (data) otherwise
+				// return an error
+
 				m_nbyteCount=m_CBW.dCBWDataTransferLength;
+
+				// What is this?
 				if(m_nnumber_blocks==0)
 				{
-					m_nnumber_blocks=1+(m_nbyteCount)/BLOCK_SIZE;
+					m_nnumber_blocks=1+(m_nbyteCount)/2048;
 				}
 				m_nState=TCDState::DataInRead; //see Update() function
 			}
 			else
 			{
 				MLOGNOTE("handleSCSI Read(10)","failed, %s", m_CDReady?"ready":"not ready");
-				m_CSW.bmCSWStatus=CD_CSW_STATUS_FAIL;
-				m_ReqSenseReply.bSenseKey = 2;
-				m_ReqSenseReply.bAddlSenseCode = 1;
-				SendCSW();
-			}
-			break;
-		}
-
-	case 0x2A: // Write (10)
-		{
-			if(m_CDReady)
-			{
-				//->big endian
-				m_nnumber_blocks = (u32)(m_CBW.CBWCB[7] << 8) | m_CBW.CBWCB[8];
-				m_nblock_address = (u32)(m_CBW.CBWCB[2] << 24) | (u32)(m_CBW.CBWCB[3] << 16)
-				                   |(u32)(m_CBW.CBWCB[4] << 8) | m_CBW.CBWCB[5];
-				MLOGDEBUG("Write(10)","addr = %u len = %u",m_nblock_address,m_nnumber_blocks);
-				m_pEP[EPOut]->BeginTransfer(CUSBCDGadgetEndpoint::TransferDataOut,
-				                            m_OutBuffer,512);
-				m_nState=TCDState::DataOut;
-				m_CSW.bmCSWStatus = bmCSWStatus;
-				m_ReqSenseReply.bSenseKey = bSenseKey;
-				m_ReqSenseReply.bAddlSenseCode = bAddlSenseCode;
-			}
-			else
-			{
-				MLOGERR("handleSCSI write(10)","failed, %s",
-					m_CDReady?"ready":"not ready");
 				m_CSW.bmCSWStatus=CD_CSW_STATUS_FAIL;
 				m_ReqSenseReply.bSenseKey = 2;
 				m_ReqSenseReply.bAddlSenseCode = 1;
@@ -687,7 +659,7 @@ void CUSBCDGadget::HandleSCSICommand()
 			int startingTrack = m_CBW.CBWCB[5];
 			int allocationLength = (m_CBW.CBWCB[7] << 8) | m_CBW.CBWCB[8];
 
-	                MLOGNOTE ("CUSBCDGadget::HandleSCSICommand", "Read TOC with msf = %02x, starting track = %d, allocation length = %d", msf, startingTrack, allocationLength);
+	                MLOGNOTE ("CUSBCDGadget::HandleSCSICommand", "Read TOC with msf = %02x, starting track = %d, allocation length = %d, m_CDReady = %d", msf, startingTrack, allocationLength, m_CDReady);
 
                         TUSBTOCData m_TOCData;
 			TUSBTOCEntry* tocEntries;
@@ -943,11 +915,13 @@ void CUSBCDGadget::Update()
 			int readCount=0;
 			if(m_CDReady)
 			{
-				offset=m_pDevice->Seek(BLOCK_SIZE*m_nblock_address);
+				// Seek to correct position in underlying storage file
+				offset=m_pDevice->Seek(block_size*m_nblock_address);
 				if(offset!=(u64)(-1))
 				{
-					readCount=m_pDevice->Read(m_InBuffer,BLOCK_SIZE);
-					if(readCount < BLOCK_SIZE)
+					// Read one block
+					readCount=m_pDevice->Read(m_InBuffer,block_size);
+					if(readCount < block_size)
 					{
 						m_CSW.bmCSWStatus=CD_CSW_STATUS_FAIL;
 						m_ReqSenseReply.bSenseKey = 2;
@@ -959,8 +933,22 @@ void CUSBCDGadget::Update()
 					m_nblock_address++;
 					m_nbyteCount-=readCount;
 					m_nState=TCDState::DataIn;
-					m_pEP[EPIn]->BeginTransfer(CUSBCDGadgetEndpoint::TransferDataIn,
-					                           m_InBuffer,readCount);
+
+					//FIXME
+					if (block_size == 2352)
+					{
+						// ISO 2048 bytes start at offset 16 (skip 12 sync + 4 header bytes)
+						m_pEP[EPIn]->BeginTransfer(CUSBCDGadgetEndpoint::TransferDataIn,
+								   m_InBuffer + 16, 2048);
+					}
+					else
+					{
+						m_pEP[EPIn]->BeginTransfer(CUSBCDGadgetEndpoint::TransferDataIn,
+								   m_InBuffer, readCount);
+					}
+
+				//	m_pEP[EPIn]->BeginTransfer(CUSBCDGadgetEndpoint::TransferDataIn,
+				//	                           m_InBuffer,readCount);
 				}
 			}
 			if(!m_CDReady || offset==(u64)(-1))
@@ -974,61 +962,7 @@ void CUSBCDGadget::Update()
 			}
 			break;
 		}
-	case TCDState::DataOutWrite:
-		{
-			//process block from host
-			assert(m_nnumber_blocks>0);
-			u64 offset=0;
-			int writeCount=0;
-			if(m_CDReady)
-			{
-				offset=m_pDevice->Seek(BLOCK_SIZE*m_nblock_address);
-				if(offset!=(u64)(-1))
-				{
-					writeCount=m_pDevice->Write(m_OutBuffer,BLOCK_SIZE);
-				}
-				if(writeCount>0)
-				{
-					if(writeCount<BLOCK_SIZE)
-					{
-						MLOGERR("UpdateWrite","writeCount = %u ",writeCount);
-						m_CSW.bmCSWStatus=CD_CSW_STATUS_FAIL;
-						m_ReqSenseReply.bSenseKey = 0x2;
-						m_ReqSenseReply.bAddlSenseCode = 0x1;
-						SendCSW();
-						break;
-					}
-					m_nnumber_blocks--;
-					m_nblock_address++;
-					if(m_nnumber_blocks==0)  //done receiving data from host
-					{
-						SendCSW();
-						break;
-					}
-				}
-			}
-			if(!m_CDReady || offset==(u64)(-1) || writeCount<=0)
-			{
-				MLOGERR("UpdateWrite","failed, %s, offset=%i, writeCount=%i",
-				        m_CDReady?"ready":"not ready",offset,writeCount);
-				m_CSW.bmCSWStatus=CD_CSW_STATUS_FAIL;
-				m_ReqSenseReply.bSenseKey = 2;
-				m_ReqSenseReply.bAddlSenseCode = 1;
-				SendCSW();
-				break;
-			}
-			else
-			{
-				if(m_nnumber_blocks>0)  //get next block
-				{
-					m_pEP[EPOut]->BeginTransfer(
-						CUSBCDGadgetEndpoint::TransferDataOut,
-					        m_OutBuffer,BLOCK_SIZE);
-					m_nState=TCDState::DataOut;
-				}
-			}
-			break;
-		}
+
 	default:
 		break;
 	}

@@ -50,7 +50,6 @@ static inline u16 htons(u16 x) {
 #endif
 
 
-#define BLOCK_SIZE 2048
 #define LEADOUT_OFFSET 150
 
 struct TUSBCDCBW   //31 bytes
@@ -163,17 +162,6 @@ struct TUSBCDReadCapacityReply   //8 bytes
 }
 PACKED;
 #define SIZE_READCAPREP 8
-
-struct TUSBCDFormatCapacityReply   //10 bytes
-{
-	u8 reserved[3] {0,0,0};
-	u8 capListLength = 8;
-	u32 numBlocks =0x803E0000;
-	u8 descriptor = 2; //formatted media
-	u8 blockLen[3];
-}
-PACKED;
-#define SIZE_FORMATR 12
 
 struct TUSBCDEventStatusReply  // 8 bytes
 {
@@ -384,15 +372,7 @@ private:
 	TUSBCDModeSenseReply m_ModeSenseReply {3,0,0,0};
 	TUSBCDReadCapacityReply m_ReadCapReply {
 		htonl(0x00), // get's overridden in CUSBCDGadget::InitDeviceSize
-		htonl(BLOCK_SIZE)
-	};
-
-	TUSBCDFormatCapacityReply m_FormatCapReply {
-		{0,0,0},      // reserved
-		0x08,         // capListLength
-		htonl(0x00),  // numBlocks (overwritten by CUSBCDGadget::InitDeviceSize)
-		0x02,         // descriptor
-		{0x00,0x08,0x00}  // blockLen
+		htonl(2048)
 	};
 
 	TUSBCDRequestSenseReply m_ReqSenseReply;
@@ -457,8 +437,8 @@ private:
 	int numTracks = 0;
 	//TUSBTOCData m_TOCData;
 
-	static const size_t MaxOutMessageSize = 2048;
-	static const size_t MaxInMessageSize = 2048;
+	static const size_t MaxOutMessageSize = 2352;
+	static const size_t MaxInMessageSize = 2352;
 	DMA_BUFFER (u8, m_OutBuffer, MaxOutMessageSize);
 	DMA_BUFFER (u8, m_InBuffer, MaxInMessageSize);
 
@@ -473,6 +453,7 @@ private:
 	u8 bmCSWStatus = 0;
 	u8 bSenseKey = 0;
         u8 bAddlSenseCode = 0;
+	int block_size = 2048;
 };
 
 #endif

@@ -12,18 +12,17 @@ CCueBinFileDevice::CCueBinFileDevice(FIL* pFile, char* cue_str)
 	m_pFile = pFile;
 	if (cue_str != nullptr)
 	{
-		// Make our own copy so we own it
-		size_t len = strlen(cue_str);
-		m_cue_str = new char[len + 1];
-		strcpy(m_cue_str, cue_str);
-		m_cue_str = cue_str;
-		m_FileType = FileType::CUEBIN;
-	} else {
-		// Default cue sheet
-		size_t len = strlen(default_cue_sheet);
-		m_cue_str = new char[len + 1];
-		strcpy(m_cue_str, default_cue_sheet);
-		m_FileType = FileType::ISO;
+	    size_t len = strlen(cue_str);
+	    m_cue_str = new char[len + 1];
+	    strcpy(m_cue_str, cue_str);
+	    m_FileType = FileType::CUEBIN;
+	}
+	else
+	{
+	    size_t len = strlen(default_cue_sheet);
+	    m_cue_str = new char[len + 1];
+	    strcpy(m_cue_str, default_cue_sheet);
+	    m_FileType = FileType::ISO;
 	}
 }
 
@@ -77,10 +76,16 @@ u64 CCueBinFileDevice::GetSize(void) const
 {
 	if (!m_pFile) {
                 LogWrite(LogError, "GetSize !m_pFile");
-		return -1;
+		return 0;
 	}
 
-	return f_size(m_pFile);
+	u64 size = f_size(m_pFile);
+	if (size < 0) {
+                LogWrite(LogError, "GetSize f_size < 0");
+		return 0;
+	}
+
+	return size;
 }
 
 char *readCueFromFIL(FIL *file) {
@@ -101,7 +106,7 @@ char *readCueFromFIL(FIL *file) {
 }
 
 const char* CCueBinFileDevice::GetCueSheet() const {
-	return m_cue_str;
+	return m_cue_stf_sizer;
 }
 
 void CCueBinFileDevice::LogWrite (TLogSeverity Severity, const char *pMessage, ...)

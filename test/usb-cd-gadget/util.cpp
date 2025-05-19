@@ -51,27 +51,31 @@ CCueBinFileDevice* loadCueBinFileDevice(char* imageName) {
     if (hasBinExtension(imageName)) {
         // Change .bin to .cue
         change_extension_to_cue(fullPath);
-        FIL cFile;
-        Result = f_open(&cFile, fullPath, FA_READ);
+        FIL* cFile = new FIL();
+        Result = f_open(cFile, fullPath, FA_READ);
         if (Result != FR_OK) {
             LOGERR("Cannot open cue file for reading");
+            f_close(cFile);
             f_close(pFile);
+            delete cFile;
             delete pFile;
             return nullptr;
         }
 
-        DWORD file_size = f_size(&cFile);
+        DWORD file_size = f_size(cFile);
         cue_str = new char[file_size + 1];
         if (!cue_str) {
-            f_close(&cFile);
+            f_close(cFile);
             f_close(pFile);
+            delete cFile;
             delete pFile;
             return nullptr;
         }
 
         UINT bytes_read = 0;
-        FRESULT res = f_read(&cFile, cue_str, file_size, &bytes_read);
-        f_close(&cFile);
+        FRESULT res = f_read(cFile, cue_str, file_size, &bytes_read);
+        f_close(cFile);
+	delete cFile;
 
         if (res != FR_OK || bytes_read != file_size) {
             delete[] cue_str;
@@ -83,5 +87,11 @@ CCueBinFileDevice* loadCueBinFileDevice(char* imageName) {
         cue_str[file_size] = '\0'; // null-terminate
     }
 
-    return new CCueBinFileDevice(pFile, cue_str);  // cue_str is optional (can be nullptr)
+    CCueBinFileDevice* ccueBinFileDevice = new CCueBinFileDevice(pFile, cue_str);
+
+    // CCueBinFileDevice now owns this, so clean up
+    if (cue_str != nullptr)
+    	delete[] cue_str;
+
+    return ccueBinFileDevice;
 }
