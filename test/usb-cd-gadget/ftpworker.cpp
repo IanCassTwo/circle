@@ -37,15 +37,16 @@
 
 // Use a per-instance name for the log macros
 #define From m_LogName
+#define WRITE_BUFFER_SIZE 4096  
 
 constexpr u16 PassivePortBase = 9000;
 constexpr size_t TextBufferSize = 512;
 constexpr unsigned int SocketTimeout = 20;
 constexpr unsigned int NumRetries = 3;
 
-const char MOTDBanner[] = "Welcome to the CDROM embedded FTP server!";
+const char MOTDBanner[] = "Welcome to the USBODE embedded FTP server!";
 
-const char ROOTDIR[] = "/SD/images";
+const char ROOTDIR[] = "/";
 
 enum class TDirectoryListEntryType
 {
@@ -683,50 +684,87 @@ bool CFTPWorker::Store(const char* pArgs)
 	CTimer* const pTimer = CTimer::Get();
 	unsigned int nTimeout = pTimer->GetTicks();
 
+
+	BYTE WriteBuffer[WRITE_BUFFER_SIZE];
+	unsigned int WriteBufferUsed = 0;
+
 	while (true)
 	{
 #ifdef FTPDAEMON_DEBUG
-		LOGDBG("Waiting to receive");
+	    LOGDBG("Waiting to receive");
 #endif
-		int nReceiveResult = pDataSocket->Receive(m_DataBuffer, sizeof(m_DataBuffer), MSG_DONTWAIT);
-		FRESULT nWriteResult;
-		UINT nWritten;
 
-		if (nReceiveResult == 0)
-		{
-			if (pTimer->GetTicks() - nTimeout >= SocketTimeout * HZ)
-			{
-				LOGERR("Socket timed out");
-				bSuccess = false;
-				break;
-			}
-			CScheduler::Get()->Yield();
-			continue;
-		}
+	    int nReceiveResult = pDataSocket->Receive(m_DataBuffer, sizeof(m_DataBuffer), MSG_DONTWAIT);
+	    FRESULT nWriteResult;
+	    UINT nWritten;
 
-		// All done
-		if (nReceiveResult < 0)
+	    if (nReceiveResult == 0)
+	    {
+		if (pTimer->GetTicks() - nTimeout >= SocketTimeout * HZ)
 		{
-			LOGNOTE("Receive done, no more data");
-			break;
+		    LOGERR("Socket timed out");
+		    bSuccess = false;
+		    break;
 		}
+		CScheduler::Get()->Yield();
+		continue;
+	    }
+
+	    // All done
+	    if (nReceiveResult < 0)
+	    {
+		LOGNOTE("Receive done, no more data");
+		break;
+	    }
 
 #ifdef FTPDAEMON_DEBUG
-		//LOGDBG("Received %d bytes", nReceiveResult);
+	    //LOGDBG("Received %d bytes", nReceiveResult);
 #endif
 
-		if ((nWriteResult = f_write(&File, m_DataBuffer, nReceiveResult, &nWritten)) != FR_OK)
+	    unsigned int remaining = nReceiveResult;
+	    BYTE* pSrc = (BYTE*)m_DataBuffer;
+
+	    while (remaining > 0)
+	    {
+		unsigned int spaceLeft = WRITE_BUFFER_SIZE - WriteBufferUsed;
+		unsigned int toCopy = (remaining < spaceLeft) ? remaining : spaceLeft;
+
+		memcpy(&WriteBuffer[WriteBufferUsed], pSrc, toCopy);
+		WriteBufferUsed += toCopy;
+		pSrc += toCopy;
+		remaining -= toCopy;
+
+		if (WriteBufferUsed == WRITE_BUFFER_SIZE)
 		{
-			LOGERR("Write FAILED, return code %d", nWriteResult);
+		    if ((nWriteResult = f_write(&File, WriteBuffer, WRITE_BUFFER_SIZE, &nWritten)) != FR_OK)
+		    {
+			LOGERR("Buffered write FAILED, return code %d", nWriteResult);
 			bSuccess = false;
 			break;
+		    }
+		    WriteBufferUsed = 0;
 		}
+	    }
 
-		//f_sync(&File);
-		CScheduler::Get()->Yield();
+	    if (!bSuccess)
+		break;
 
-		nTimeout = pTimer->GetTicks();
+	    CScheduler::Get()->Yield();
+	    nTimeout = pTimer->GetTicks();
 	}
+
+	// flush any remaining data
+	if (WriteBufferUsed > 0)
+	{
+	    UINT nWritten;
+	    FRESULT nWriteResult = f_write(&File, WriteBuffer, WriteBufferUsed, &nWritten);
+	    if (nWriteResult != FR_OK)
+	    {
+		LOGERR("Final buffered write FAILED, return code %d", nWriteResult);
+		bSuccess = false;
+	    }
+	}
+
 	f_sync(&File);
 
 	if (bSuccess)
