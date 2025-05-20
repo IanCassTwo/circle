@@ -322,10 +322,21 @@ THTTPStatus CWebServer::GetContent (const char  *pPath,
     else if (strcmp (pPath, "/system") == 0 && pParams && strncmp (pParams, "action=", 7) == 0) 
     { 
         // Handle system operation (shutdown/reboot)
+        char actionValue[32]; // Buffer to hold either "shutdown" or "reboot"
         const char* equalSign = strchr(pParams, '=');
         if (equalSign && *(equalSign + 1) != '\0') {
+            // Extract only the value until next & or end of string
+            size_t i = 0;
+            const char* p = equalSign + 1;
+            while (*p && *p != '&' && i < sizeof(actionValue) - 1) {
+                actionValue[i++] = *p++;
+            }
+            actionValue[i] = '\0';
+            
+            LOGNOTE("System action requested: %s", actionValue);
+            
             resultCode = handle_system_operation((char*)m_pContentBuffer, MAX_CONTENT_SIZE, 
-                                               equalSign + 1, &m_ShutdownMode);
+                                              actionValue, &m_ShutdownMode);
             nLength = strlen((char*)m_pContentBuffer);
             *ppContentType = "text/html; charset=utf-8";
         } else {
