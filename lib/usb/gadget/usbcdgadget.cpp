@@ -38,8 +38,8 @@ const TUSBDeviceDescriptor CUSBCDGadget::s_DeviceDescriptor =
 {
 	sizeof (TUSBDeviceDescriptor),
 	DESCRIPTOR_DEVICE,
-	0x200,				// bcdUSB
-	0,               //bDeviceClass
+	0x200,		// bcdUSB
+	0,              //bDeviceClass
 	0,              //bDeviceSubClass
 	0,              //bDeviceProtocol
 	64,		// bMaxPacketSize0
@@ -78,7 +78,8 @@ const CUSBCDGadget::TUSBMSTGadgetConfigurationDescriptor CUSBCDGadget::s_Configu
 		DESCRIPTOR_ENDPOINT,
 		0x81, 			//IN number 1
 		2,			// bmAttributes (Bulk)
-		512,			// wMaxPacketSize
+		//512,			// wMaxPacketSize
+		64,			// wMaxPacketSize
 		0			// bInterval
 	},
 	{
@@ -86,7 +87,8 @@ const CUSBCDGadget::TUSBMSTGadgetConfigurationDescriptor CUSBCDGadget::s_Configu
 		DESCRIPTOR_ENDPOINT,
 		0x02, 			//OUT number 2
 		2,			// bmAttributes (Bulk)
-		512,			// wMaxPacketSize
+		64,			// wMaxPacketSize
+		//512,			// wMaxPacketSize
 		0   			// bInterval
 	}
 };
@@ -99,7 +101,8 @@ const char *const CUSBCDGadget::s_StringDescriptor[] =
 };
 
 CUSBCDGadget::CUSBCDGadget (CInterruptSystem *pInterruptSystem, CCueBinFileDevice *pDevice)
-:	CDWUSBGadget (pInterruptSystem, HighSpeed),
+:	CDWUSBGadget (pInterruptSystem, FullSpeed),
+//:	CDWUSBGadget (pInterruptSystem, HighSpeed),
 	m_pDevice (pDevice),
 	m_pEP {nullptr, nullptr, nullptr}
 {
@@ -683,7 +686,7 @@ void CUSBCDGadget::HandleSCSICommand()
 			int startingTrack = m_CBW.CBWCB[5];
 			int allocationLength = (m_CBW.CBWCB[7] << 8) | m_CBW.CBWCB[8];
 
-	                //MLOGNOTE ("CUSBCDGadget::HandleSCSICommand", "Read TOC with msf = %02x, starting track = %d, allocation length = %d, m_CDReady = %d", msf, startingTrack, allocationLength, m_CDReady);
+	                MLOGNOTE ("CUSBCDGadget::HandleSCSICommand", "Read TOC with msf = %02x, starting track = %d, allocation length = %d, m_CDReady = %d", msf, startingTrack, allocationLength, m_CDReady);
 
                         TUSBTOCData m_TOCData;
 			TUSBTOCEntry* tocEntries;
@@ -830,7 +833,7 @@ void CUSBCDGadget::HandleSCSICommand()
 
         case 0x51: // READ DISC INFORMATION CMD
 		{
-                        MLOGNOTE("CUSBCDGadget::HandleSCSICommand", "Read Disc Information");
+                        //MLOGNOTE("CUSBCDGadget::HandleSCSICommand", "Read Disc Information");
 
 			//TODO: static for now
 			memcpy(m_InBuffer, &m_DiscInfoReply, SIZE_DISC_INFO_REPLY);
