@@ -355,18 +355,23 @@ THTTPStatus CWebServer::GetContent (const char  *pPath,
     { 
         // Extract value (after '=')
         char pParamValue[256];
+        char decodedValue[256];
         const char* equalSign = strchr(pParams, '=');
         if (equalSign && *(equalSign + 1) != '\0') {
             strncpy(pParamValue, equalSign + 1, sizeof(pParamValue) - 1);
             pParamValue[sizeof(pParamValue) - 1] = '\0';
+            
+            // URL decode the filename
+            urldecode(decodedValue, pParamValue);
+            LOGNOTE("Mounting file (decoded): %s", decodedValue);
 
-	    if (!saveMountedImageName(pParamValue)) {
-		    strcpy((char*)m_pContentBuffer, "");
-		    nLength = 0;
-		    return HTTPInternalServerError;
-	    }
+            if (!saveMountedImageName(decodedValue)) {
+                strcpy((char*)m_pContentBuffer, "");
+                nLength = 0;
+                return HTTPInternalServerError;
+            }
 
-            CCueBinFileDevice* cueBinFileDevice = loadCueBinFileDevice(pParamValue);
+            CCueBinFileDevice* cueBinFileDevice = loadCueBinFileDevice(decodedValue);
             if (!cueBinFileDevice) {
                 LOGERR("Failed to get cueBinFileDevice");
                 return HTTPInternalServerError;
@@ -375,7 +380,7 @@ THTTPStatus CWebServer::GetContent (const char  *pPath,
             m_pCDGadget->SetDevice(cueBinFileDevice);
             
             // Generate a success page
-            resultCode = generate_mount_success_page((char*)m_pContentBuffer, MAX_CONTENT_SIZE, pParamValue);
+            resultCode = generate_mount_success_page((char*)m_pContentBuffer, MAX_CONTENT_SIZE, decodedValue);
             nLength = strlen((char*)m_pContentBuffer);
             *ppContentType = "text/html; charset=utf-8";
         } else {
@@ -385,38 +390,29 @@ THTTPStatus CWebServer::GetContent (const char  *pPath,
             return HTTPBadRequest;
         }
     }
-    // Keep the API JSON endpoint for compatibility
+    // Update in the controller endpoint handler
     else if (strcmp (pPath, "/controller") == 0 && (strncmp (pParams, "mount=", 6) == 0)) 
     { 
         // Extract value (after '=')
         char pParamValue[256];
+        char decodedValue[256];
         const char* equalSign = strchr(pParams, '=');
         if (equalSign && *(equalSign + 1) != '\0') {
             strncpy(pParamValue, equalSign + 1, sizeof(pParamValue) - 1);
             pParamValue[sizeof(pParamValue) - 1] = '\0';
+            
+            // URL decode the filename
+            urldecode(decodedValue, pParamValue);
+            LOGNOTE("Controller mounting file (decoded): %s", decodedValue);
 
-            // Write pParamValue to SD:/image.txt
-            FIL txtFile;
-            UINT bytesWritten;
-            FRESULT Result = f_open(&txtFile, "SD:/image.txt", FA_WRITE | FA_CREATE_ALWAYS);
-            if (Result != FR_OK) {
-                LOGERR("Cannot open image.txt for writing");
+            // Write decodedValue to SD:/image.txt
+            if (!saveMountedImageName(decodedValue)) {
                 strcpy((char*)m_pContentBuffer, "");
                 nLength = 0;
                 return HTTPInternalServerError;
             }
 
-            Result = f_write(&txtFile, pParamValue, strlen(pParamValue), &bytesWritten);
-            f_close(&txtFile);
-
-            if (Result != FR_OK || bytesWritten != strlen(pParamValue)) {
-                LOGERR("Failed to write to image.txt");
-                strcpy((char*)m_pContentBuffer, "");
-                nLength = 0;
-                return HTTPInternalServerError;
-            }
-    
-            CCueBinFileDevice* cueBinFileDevice = loadCueBinFileDevice(pParamValue);
+            CCueBinFileDevice* cueBinFileDevice = loadCueBinFileDevice(decodedValue);
             if (!cueBinFileDevice) {
                 LOGERR("Failed to get cueBinFileDevice");
                 return HTTPInternalServerError;
