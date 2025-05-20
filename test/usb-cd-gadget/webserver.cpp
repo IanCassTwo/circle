@@ -77,11 +77,14 @@ LOGMODULE ("kernel");
 
 static const char FromWebServer[] = "webserver";
 
+TShutdownMode CWebServer::s_GlobalShutdownMode = ShutdownNone;
+
 CWebServer::CWebServer (CNetSubSystem *pNetSubSystem, CUSBCDGadget *pCDGadget, CActLED *pActLED, CSocket *pSocket)
 :       CHTTPDaemon (pNetSubSystem, pSocket, MAX_CONTENT_SIZE),
         m_pActLED (pActLED),
         m_pCDGadget (pCDGadget),
-        m_pContentBuffer(new u8[MAX_CONTENT_SIZE])
+        m_pContentBuffer(new u8[MAX_CONTENT_SIZE]),
+        m_ShutdownMode(ShutdownNone)
 {
 }
 
@@ -222,6 +225,7 @@ THTTPStatus generate_index_page(char *output_buffer, size_t max_len) {
         "\n"
         "<div>\n"
         "    <a class=\"button\" href=\"/list\">Load Another Image</a>\n"
+        "    <a class=\"button\" href=\"/system?action=shutdown\" onclick=\"return confirm('Are you sure you want to shut down the device?');\">Shutdown USBODE</a>\n"
         "</div>",
         currentImage);
     
@@ -243,6 +247,40 @@ THTTPStatus generate_mount_success_page(char *output_buffer, size_t max_len, con
         "    <a class=\"button\" href=\"/list\">Select Another File</a>\n"
         "</div>",
         filename);
+    
+    // Format the complete HTML page using the layout template
+    snprintf(output_buffer, max_len, HTML_LAYOUT, content, VERSION);
+    return HTTPOK;
+}
+
+THTTPStatus handle_system_operation(char *output_buffer, size_t max_len, const char *action, TShutdownMode *pShutdownMode) {
+    char content[MAX_CONTENT_SIZE];
+    
+    if (strcmp(action, "shutdown") == 0) {
+        snprintf(content, sizeof(content),
+            "<h3>System Shutdown</h3>\n"
+            "<div class=\"info-box\">\n"
+            "    <p>The system is shutting down...</p>\n"
+            "</div>");
+        
+        // Set the global shutdown mode instead of the instance variable
+        CWebServer::SetGlobalShutdownMode(ShutdownHalt);
+        *pShutdownMode = ShutdownHalt;  // Also set the passed pointer for compatibility
+    } 
+    else if (strcmp(action, "reboot") == 0) {
+        snprintf(content, sizeof(content),
+            "<h3>System Reboot</h3>\n"
+            "<div class=\"info-box\">\n"
+            "    <p>The system is rebooting...</p>\n"
+            "</div>");
+        
+        // Set the global shutdown mode instead of the instance variable
+        CWebServer::SetGlobalShutdownMode(ShutdownReboot);
+        *pShutdownMode = ShutdownReboot;  // Also set the passed pointer for compatibility
+    }
+    else {
+        return HTTPBadRequest;
+    }
     
     // Format the complete HTML page using the layout template
     snprintf(output_buffer, max_len, HTML_LAYOUT, content, VERSION);
@@ -286,22 +324,54 @@ THTTPStatus CWebServer::GetContent (const char  *pPath,
         nLength = strlen((char*)m_pContentBuffer);
         *ppContentType = "application/json; charset=utf-8";
     } 
+    else if (strcmp (pPath, "/system") == 0 && pParams && strncmp (pParams, "action=", 7) == 0) 
+    { 
+        // Handle system operation (shutdown/reboot)
+        char actionValue[32]; // Buffer to hold either "shutdown" or "reboot"
+        const char* equalSign = strchr(pParams, '=');
+        if (equalSign && *(equalSign + 1) != '\0') {
+            // Extract only the value until next & or end of string
+            size_t i = 0;
+            const char* p = equalSign + 1;
+            while (*p && *p != '&' && i < sizeof(actionValue) - 1) {
+                actionValue[i++] = *p++;
+            }
+            actionValue[i] = '\0';
+            
+            LOGNOTE("System action requested: %s", actionValue);
+            
+            resultCode = handle_system_operation((char*)m_pContentBuffer, MAX_CONTENT_SIZE, 
+                                              actionValue, &m_ShutdownMode);
+            nLength = strlen((char*)m_pContentBuffer);
+            *ppContentType = "text/html; charset=utf-8";
+        } else {
+            LOGERR("system action value is missing");
+            strcpy((char*)m_pContentBuffer, "system action value is missing");
+            nLength = strlen((char*)m_pContentBuffer);
+            return HTTPBadRequest;
+        }
+    }
     else if (strcmp (pPath, "/mount") == 0 && pParams && strncmp (pParams, "file=", 5) == 0) 
     { 
         // Extract value (after '=')
         char pParamValue[256];
+        char decodedValue[256];
         const char* equalSign = strchr(pParams, '=');
         if (equalSign && *(equalSign + 1) != '\0') {
             strncpy(pParamValue, equalSign + 1, sizeof(pParamValue) - 1);
             pParamValue[sizeof(pParamValue) - 1] = '\0';
+            
+            // URL decode the filename
+            urldecode(decodedValue, pParamValue);
+            LOGNOTE("Mounting file (decoded): %s", decodedValue);
 
-	    if (!saveMountedImageName(pParamValue)) {
-		    strcpy((char*)m_pContentBuffer, "");
-		    nLength = 0;
-		    return HTTPInternalServerError;
-	    }
+            if (!saveMountedImageName(decodedValue)) {
+                strcpy((char*)m_pContentBuffer, "");
+                nLength = 0;
+                return HTTPInternalServerError;
+            }
 
-            CCueBinFileDevice* cueBinFileDevice = loadCueBinFileDevice(pParamValue);
+            CCueBinFileDevice* cueBinFileDevice = loadCueBinFileDevice(decodedValue);
             if (!cueBinFileDevice) {
                 LOGERR("Failed to get cueBinFileDevice");
                 return HTTPInternalServerError;
@@ -310,7 +380,7 @@ THTTPStatus CWebServer::GetContent (const char  *pPath,
             m_pCDGadget->SetDevice(cueBinFileDevice);
             
             // Generate a success page
-            resultCode = generate_mount_success_page((char*)m_pContentBuffer, MAX_CONTENT_SIZE, pParamValue);
+            resultCode = generate_mount_success_page((char*)m_pContentBuffer, MAX_CONTENT_SIZE, decodedValue);
             nLength = strlen((char*)m_pContentBuffer);
             *ppContentType = "text/html; charset=utf-8";
         } else {
@@ -320,38 +390,29 @@ THTTPStatus CWebServer::GetContent (const char  *pPath,
             return HTTPBadRequest;
         }
     }
-    // Keep the API JSON endpoint for compatibility
+    // Update in the controller endpoint handler
     else if (strcmp (pPath, "/controller") == 0 && (strncmp (pParams, "mount=", 6) == 0)) 
     { 
         // Extract value (after '=')
         char pParamValue[256];
+        char decodedValue[256];
         const char* equalSign = strchr(pParams, '=');
         if (equalSign && *(equalSign + 1) != '\0') {
             strncpy(pParamValue, equalSign + 1, sizeof(pParamValue) - 1);
             pParamValue[sizeof(pParamValue) - 1] = '\0';
+            
+            // URL decode the filename
+            urldecode(decodedValue, pParamValue);
+            LOGNOTE("Controller mounting file (decoded): %s", decodedValue);
 
-            // Write pParamValue to SD:/image.txt
-            FIL txtFile;
-            UINT bytesWritten;
-            FRESULT Result = f_open(&txtFile, "SD:/image.txt", FA_WRITE | FA_CREATE_ALWAYS);
-            if (Result != FR_OK) {
-                LOGERR("Cannot open image.txt for writing");
+            // Write decodedValue to SD:/image.txt
+            if (!saveMountedImageName(decodedValue)) {
                 strcpy((char*)m_pContentBuffer, "");
                 nLength = 0;
                 return HTTPInternalServerError;
             }
 
-            Result = f_write(&txtFile, pParamValue, strlen(pParamValue), &bytesWritten);
-            f_close(&txtFile);
-
-            if (Result != FR_OK || bytesWritten != strlen(pParamValue)) {
-                LOGERR("Failed to write to image.txt");
-                strcpy((char*)m_pContentBuffer, "");
-                nLength = 0;
-                return HTTPInternalServerError;
-            }
-    
-            CCueBinFileDevice* cueBinFileDevice = loadCueBinFileDevice(pParamValue);
+            CCueBinFileDevice* cueBinFileDevice = loadCueBinFileDevice(decodedValue);
             if (!cueBinFileDevice) {
                 LOGERR("Failed to get cueBinFileDevice");
                 return HTTPInternalServerError;
@@ -387,4 +448,14 @@ THTTPStatus CWebServer::GetContent (const char  *pPath,
     *pLength = nLength;
 
     return resultCode;
+}
+
+TShutdownMode CWebServer::GetShutdownMode(void) const 
+{
+    return s_GlobalShutdownMode;
+}
+
+void CWebServer::SetGlobalShutdownMode(TShutdownMode mode) 
+{
+    s_GlobalShutdownMode = mode;
 }
