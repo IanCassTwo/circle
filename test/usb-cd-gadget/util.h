@@ -4,7 +4,7 @@
 #include <circle/util.h>
 #include <discimage/cuebinfile.h>
 
-#define MAX_FILENAME    64
+#define MAX_FILENAME    255
 
 char tolower(char c);
 bool hasBinExtension(const char* imageName);

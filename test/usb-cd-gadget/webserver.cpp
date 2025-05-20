@@ -23,9 +23,9 @@
 #include "util.h"
 #include <assert.h>
 
-#define MAX_CONTENT_SIZE        16384
-#define MAX_FILES       255
-#define MAX_FILENAME    64
+#define MAX_CONTENT_SIZE        524288
+#define MAX_FILES       1024
+#define MAX_FILENAME    255
 #define VERSION         "2.0.0"
 
 // HTML template with CSS styling embedded
@@ -105,11 +105,11 @@ THTTPStatus list_files_as_table(char *output_buffer, size_t max_len) {
     FRESULT fr;
     char content[MAX_CONTENT_SIZE];
     size_t offset = 0;
-    char currentImage[MAX_FILENAME];
+    char currentImage[MAX_FILENAME + 1]; // +1 for null terminator
     if (getCurrentMountedImage(currentImage, sizeof(currentImage))) {
             LOGNOTE("Found image filename %s", currentImage);
     } else {
-	    // Defaulting here lets the user get out of a hole
+            // Defaulting here lets the user get out of a hole
             strcpy(currentImage, "image.iso");
             LOGERR("Could not load image name, using default: %s", currentImage);
     }
@@ -117,6 +117,13 @@ THTTPStatus list_files_as_table(char *output_buffer, size_t max_len) {
     fr = f_opendir(&dir, "/images");
     if (fr != FR_OK) {
         snprintf(output_buffer, max_len, "Error opening directory: %d", fr);
+        return HTTPInternalServerError;
+    }
+
+    // Make sure we have enough space for the header, full filename, and some additional HTML
+    // The HTML template needs approximately 200 characters plus the filename length
+    if (MAX_CONTENT_SIZE < 200 + MAX_FILENAME) {
+        LOGERR("Content buffer size too small for maximum filename length");
         return HTTPInternalServerError;
     }
 
@@ -139,23 +146,30 @@ THTTPStatus list_files_as_table(char *output_buffer, size_t max_len) {
             continue;
         }
 
+        // Check remaining space before adding a new file entry
+        // Each file entry requires the filename length * 2 (for href and display) plus ~60 chars for HTML
+        size_t entry_size = strlen(fno.fname) * 2 + 60;
+        if (sizeof(content) - offset <= entry_size) {
+            offset += snprintf(content + offset, sizeof(content) - offset, 
+                "<p>Too many files to display completely</p>");
+            break;
+        }
+
         // Add file with alternating row colors
         const char* rowClass = (index % 2 == 0) ? "file-link-even" : "file-link-odd";
         offset += snprintf(content + offset, sizeof(content) - offset, 
             "<div class=\"file-link %s\"><a href=\"/mount?file=%s\">%s</a></div>\n", 
             rowClass, fno.fname, fno.fname);
         index++;
-
-        if (offset >= sizeof(content) - MAX_FILENAME - 100) {  // prevent overflow
-            offset += snprintf(content + offset, sizeof(content) - offset, "<p>Too many files to display completely</p>");
-            break;
-        }
     }
 
-    offset += snprintf(content + offset, sizeof(content) - offset,
-        "<div>\n"
-        "    <a class=\"button\" href=\"/\">Return to Homepage</a>\n"
-        "</div>");
+    // Make sure we have space for the footer
+    if (sizeof(content) - offset > 100) {
+        offset += snprintf(content + offset, sizeof(content) - offset,
+            "<div>\n"
+            "    <a class=\"button\" href=\"/\">Return to Homepage</a>\n"
+            "</div>");
+    }
 
     f_closedir(&dir);
     
@@ -207,7 +221,7 @@ THTTPStatus list_files_as_json(char *json_output, size_t max_len) {
 }
 
 THTTPStatus generate_index_page(char *output_buffer, size_t max_len) {
-    char currentImage[MAX_FILENAME];
+    char currentImage[MAX_FILENAME + 1]; // +1 for null terminator
     if (getCurrentMountedImage(currentImage, sizeof(currentImage))) {
             LOGNOTE("Found image filename %s", currentImage);
     } else {
@@ -217,6 +231,13 @@ THTTPStatus generate_index_page(char *output_buffer, size_t max_len) {
     }
     
     char content[MAX_CONTENT_SIZE];
+    
+    // Make sure we have enough space for the HTML template and the full filename
+    if (MAX_CONTENT_SIZE < 300 + MAX_FILENAME) {
+        LOGERR("Content buffer size too small for maximum filename length");
+        return HTTPInternalServerError;
+    }
+    
     snprintf(content, sizeof(content),
         "<h3>Welcome to USBODE</h3>\n"
         "<div class=\"info-box\">\n"
@@ -354,8 +375,8 @@ THTTPStatus CWebServer::GetContent (const char  *pPath,
     else if (strcmp (pPath, "/mount") == 0 && pParams && strncmp (pParams, "file=", 5) == 0) 
     { 
         // Extract value (after '=')
-        char pParamValue[256];
-        char decodedValue[256];
+        char pParamValue[MAX_FILENAME * 3]; // URL-encoded could be longer
+        char decodedValue[MAX_FILENAME + 1];
         const char* equalSign = strchr(pParams, '=');
         if (equalSign && *(equalSign + 1) != '\0') {
             strncpy(pParamValue, equalSign + 1, sizeof(pParamValue) - 1);
@@ -394,8 +415,8 @@ THTTPStatus CWebServer::GetContent (const char  *pPath,
     else if (strcmp (pPath, "/controller") == 0 && (strncmp (pParams, "mount=", 6) == 0)) 
     { 
         // Extract value (after '=')
-        char pParamValue[256];
-        char decodedValue[256];
+        char pParamValue[MAX_FILENAME * 3]; // URL-encoded could be longer
+        char decodedValue[MAX_FILENAME + 1];
         const char* equalSign = strchr(pParams, '=');
         if (equalSign && *(equalSign + 1) != '\0') {
             strncpy(pParamValue, equalSign + 1, sizeof(pParamValue) - 1);
