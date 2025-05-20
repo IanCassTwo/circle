@@ -26,6 +26,15 @@
 #include <fatfs/ff.h>
 #include <linux/kernel.h>
 #include <discimage/cuebinfile.h>
+#include "kernel.h" // Add this to have access to TShutdownMode
+
+// Forward declaration of TShutdownMode enum to avoid circular dependencies
+enum TShutdownMode
+{
+    ShutdownNone,
+    ShutdownHalt,
+    ShutdownReboot
+};
 
 class CWebServer : public CHTTPDaemon
 {
