@@ -211,6 +211,24 @@ TShutdownMode CKernel::Run (void)
 			}
 			else
 				LOGNOTE("FTP daemon initialized");
+		 }
+
+		// Check for shutdown/reboot request from the web interface
+		if (pCWebServer != nullptr) {
+			TShutdownMode mode = pCWebServer->GetShutdownMode();
+			if (mode != ShutdownNone) {
+				LOGNOTE("Shutdown requested via web interface: %s", 
+					   (mode == ShutdownReboot) ? "Reboot" : "Halt");
+				
+				// Clean up resources
+				delete pmDNSPublisher;
+				delete pCWebServer;
+				if (m_pFTPDaemon) {
+					delete m_pFTPDaemon;
+				}
+				
+				return mode;
+			}
 		}
 
                 m_Scheduler.Yield();

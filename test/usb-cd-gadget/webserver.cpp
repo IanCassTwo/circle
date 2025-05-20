@@ -23,9 +23,9 @@
 #include "util.h"
 #include <assert.h>
 
-#define MAX_CONTENT_SIZE        16384
-#define MAX_FILES       255
-#define MAX_FILENAME    64
+#define MAX_CONTENT_SIZE        524288
+#define MAX_FILES       1024
+#define MAX_FILENAME    255
 #define VERSION         "2.0.0"
 
 // HTML template with CSS styling embedded
@@ -77,11 +77,14 @@ LOGMODULE ("kernel");
 
 static const char FromWebServer[] = "webserver";
 
+TShutdownMode CWebServer::s_GlobalShutdownMode = ShutdownNone;
+
 CWebServer::CWebServer (CNetSubSystem *pNetSubSystem, CUSBCDGadget *pCDGadget, CActLED *pActLED, CSocket *pSocket)
 :       CHTTPDaemon (pNetSubSystem, pSocket, MAX_CONTENT_SIZE),
         m_pActLED (pActLED),
         m_pCDGadget (pCDGadget),
-        m_pContentBuffer(new u8[MAX_CONTENT_SIZE])
+        m_pContentBuffer(new u8[MAX_CONTENT_SIZE]),
+        m_ShutdownMode(ShutdownNone)
 {
 }
 
@@ -102,11 +105,11 @@ THTTPStatus list_files_as_table(char *output_buffer, size_t max_len) {
     FRESULT fr;
     char content[MAX_CONTENT_SIZE];
     size_t offset = 0;
-    char currentImage[MAX_FILENAME];
+    char currentImage[MAX_FILENAME + 1]; // +1 for null terminator
     if (getCurrentMountedImage(currentImage, sizeof(currentImage))) {
             LOGNOTE("Found image filename %s", currentImage);
     } else {
-	    // Defaulting here lets the user get out of a hole
+            // Defaulting here lets the user get out of a hole
             strcpy(currentImage, "image.iso");
             LOGERR("Could not load image name, using default: %s", currentImage);
     }
@@ -114,6 +117,13 @@ THTTPStatus list_files_as_table(char *output_buffer, size_t max_len) {
     fr = f_opendir(&dir, "/images");
     if (fr != FR_OK) {
         snprintf(output_buffer, max_len, "Error opening directory: %d", fr);
+        return HTTPInternalServerError;
+    }
+
+    // Make sure we have enough space for the header, full filename, and some additional HTML
+    // The HTML template needs approximately 200 characters plus the filename length
+    if (MAX_CONTENT_SIZE < 200 + MAX_FILENAME) {
+        LOGERR("Content buffer size too small for maximum filename length");
         return HTTPInternalServerError;
     }
 
@@ -136,23 +146,30 @@ THTTPStatus list_files_as_table(char *output_buffer, size_t max_len) {
             continue;
         }
 
+        // Check remaining space before adding a new file entry
+        // Each file entry requires the filename length * 2 (for href and display) plus ~60 chars for HTML
+        size_t entry_size = strlen(fno.fname) * 2 + 60;
+        if (sizeof(content) - offset <= entry_size) {
+            offset += snprintf(content + offset, sizeof(content) - offset, 
+                "<p>Too many files to display completely</p>");
+            break;
+        }
+
         // Add file with alternating row colors
         const char* rowClass = (index % 2 == 0) ? "file-link-even" : "file-link-odd";
         offset += snprintf(content + offset, sizeof(content) - offset, 
             "<div class=\"file-link %s\"><a href=\"/mount?file=%s\">%s</a></div>\n", 
             rowClass, fno.fname, fno.fname);
         index++;
-
-        if (offset >= sizeof(content) - MAX_FILENAME - 100) {  // prevent overflow
-            offset += snprintf(content + offset, sizeof(content) - offset, "<p>Too many files to display completely</p>");
-            break;
-        }
     }
 
-    offset += snprintf(content + offset, sizeof(content) - offset,
-        "<div>\n"
-        "    <a class=\"button\" href=\"/\">Return to Homepage</a>\n"
-        "</div>");
+    // Make sure we have space for the footer
+    if (sizeof(content) - offset > 100) {
+        offset += snprintf(content + offset, sizeof(content) - offset,
+            "<div>\n"
+            "    <a class=\"button\" href=\"/\">Return to Homepage</a>\n"
+            "</div>");
+    }
 
     f_closedir(&dir);
     
@@ -204,7 +221,7 @@ THTTPStatus list_files_as_json(char *json_output, size_t max_len) {
 }
 
 THTTPStatus generate_index_page(char *output_buffer, size_t max_len) {
-    char currentImage[MAX_FILENAME];
+    char currentImage[MAX_FILENAME + 1]; // +1 for null terminator
     if (getCurrentMountedImage(currentImage, sizeof(currentImage))) {
             LOGNOTE("Found image filename %s", currentImage);
     } else {
@@ -214,6 +231,13 @@ THTTPStatus generate_index_page(char *output_buffer, size_t max_len) {
     }
     
     char content[MAX_CONTENT_SIZE];
+    
+    // Make sure we have enough space for the HTML template and the full filename
+    if (MAX_CONTENT_SIZE < 300 + MAX_FILENAME) {
+        LOGERR("Content buffer size too small for maximum filename length");
+        return HTTPInternalServerError;
+    }
+    
     snprintf(content, sizeof(content),
         "<h3>Welcome to USBODE</h3>\n"
         "<div class=\"info-box\">\n"
@@ -222,6 +246,7 @@ THTTPStatus generate_index_page(char *output_buffer, size_t max_len) {
         "\n"
         "<div>\n"
         "    <a class=\"button\" href=\"/list\">Load Another Image</a>\n"
+        "    <a class=\"button\" href=\"/system?action=shutdown\" onclick=\"return confirm('Are you sure you want to shut down the device?');\">Shutdown USBODE</a>\n"
         "</div>",
         currentImage);
     
@@ -243,6 +268,40 @@ THTTPStatus generate_mount_success_page(char *output_buffer, size_t max_len, con
         "    <a class=\"button\" href=\"/list\">Select Another File</a>\n"
         "</div>",
         filename);
+    
+    // Format the complete HTML page using the layout template
+    snprintf(output_buffer, max_len, HTML_LAYOUT, content, VERSION);
+    return HTTPOK;
+}
+
+THTTPStatus handle_system_operation(char *output_buffer, size_t max_len, const char *action, TShutdownMode *pShutdownMode) {
+    char content[MAX_CONTENT_SIZE];
+    
+    if (strcmp(action, "shutdown") == 0) {
+        snprintf(content, sizeof(content),
+            "<h3>System Shutdown</h3>\n"
+            "<div class=\"info-box\">\n"
+            "    <p>The system is shutting down...</p>\n"
+            "</div>");
+        
+        // Set the global shutdown mode instead of the instance variable
+        CWebServer::SetGlobalShutdownMode(ShutdownHalt);
+        *pShutdownMode = ShutdownHalt;  // Also set the passed pointer for compatibility
+    } 
+    else if (strcmp(action, "reboot") == 0) {
+        snprintf(content, sizeof(content),
+            "<h3>System Reboot</h3>\n"
+            "<div class=\"info-box\">\n"
+            "    <p>The system is rebooting...</p>\n"
+            "</div>");
+        
+        // Set the global shutdown mode instead of the instance variable
+        CWebServer::SetGlobalShutdownMode(ShutdownReboot);
+        *pShutdownMode = ShutdownReboot;  // Also set the passed pointer for compatibility
+    }
+    else {
+        return HTTPBadRequest;
+    }
     
     // Format the complete HTML page using the layout template
     snprintf(output_buffer, max_len, HTML_LAYOUT, content, VERSION);
@@ -286,22 +345,54 @@ THTTPStatus CWebServer::GetContent (const char  *pPath,
         nLength = strlen((char*)m_pContentBuffer);
         *ppContentType = "application/json; charset=utf-8";
     } 
+    else if (strcmp (pPath, "/system") == 0 && pParams && strncmp (pParams, "action=", 7) == 0) 
+    { 
+        // Handle system operation (shutdown/reboot)
+        char actionValue[32]; // Buffer to hold either "shutdown" or "reboot"
+        const char* equalSign = strchr(pParams, '=');
+        if (equalSign && *(equalSign + 1) != '\0') {
+            // Extract only the value until next & or end of string
+            size_t i = 0;
+            const char* p = equalSign + 1;
+            while (*p && *p != '&' && i < sizeof(actionValue) - 1) {
+                actionValue[i++] = *p++;
+            }
+            actionValue[i] = '\0';
+            
+            LOGNOTE("System action requested: %s", actionValue);
+            
+            resultCode = handle_system_operation((char*)m_pContentBuffer, MAX_CONTENT_SIZE, 
+                                              actionValue, &m_ShutdownMode);
+            nLength = strlen((char*)m_pContentBuffer);
+            *ppContentType = "text/html; charset=utf-8";
+        } else {
+            LOGERR("system action value is missing");
+            strcpy((char*)m_pContentBuffer, "system action value is missing");
+            nLength = strlen((char*)m_pContentBuffer);
+            return HTTPBadRequest;
+        }
+    }
     else if (strcmp (pPath, "/mount") == 0 && pParams && strncmp (pParams, "file=", 5) == 0) 
     { 
         // Extract value (after '=')
-        char pParamValue[256];
+        char pParamValue[MAX_FILENAME * 3]; // URL-encoded could be longer
+        char decodedValue[MAX_FILENAME + 1];
         const char* equalSign = strchr(pParams, '=');
         if (equalSign && *(equalSign + 1) != '\0') {
             strncpy(pParamValue, equalSign + 1, sizeof(pParamValue) - 1);
             pParamValue[sizeof(pParamValue) - 1] = '\0';
+            
+            // URL decode the filename
+            urldecode(decodedValue, pParamValue);
+            LOGNOTE("Mounting file (decoded): %s", decodedValue);
 
-	    if (!saveMountedImageName(pParamValue)) {
-		    strcpy((char*)m_pContentBuffer, "");
-		    nLength = 0;
-		    return HTTPInternalServerError;
-	    }
+            if (!saveMountedImageName(decodedValue)) {
+                strcpy((char*)m_pContentBuffer, "");
+                nLength = 0;
+                return HTTPInternalServerError;
+            }
 
-            CCueBinFileDevice* cueBinFileDevice = loadCueBinFileDevice(pParamValue);
+            CCueBinFileDevice* cueBinFileDevice = loadCueBinFileDevice(decodedValue);
             if (!cueBinFileDevice) {
                 LOGERR("Failed to get cueBinFileDevice");
                 return HTTPInternalServerError;
@@ -310,7 +401,7 @@ THTTPStatus CWebServer::GetContent (const char  *pPath,
             m_pCDGadget->SetDevice(cueBinFileDevice);
             
             // Generate a success page
-            resultCode = generate_mount_success_page((char*)m_pContentBuffer, MAX_CONTENT_SIZE, pParamValue);
+            resultCode = generate_mount_success_page((char*)m_pContentBuffer, MAX_CONTENT_SIZE, decodedValue);
             nLength = strlen((char*)m_pContentBuffer);
             *ppContentType = "text/html; charset=utf-8";
         } else {
@@ -320,38 +411,29 @@ THTTPStatus CWebServer::GetContent (const char  *pPath,
             return HTTPBadRequest;
         }
     }
-    // Keep the API JSON endpoint for compatibility
+    // Update in the controller endpoint handler
     else if (strcmp (pPath, "/controller") == 0 && (strncmp (pParams, "mount=", 6) == 0)) 
     { 
         // Extract value (after '=')
-        char pParamValue[256];
+        char pParamValue[MAX_FILENAME * 3]; // URL-encoded could be longer
+        char decodedValue[MAX_FILENAME + 1];
         const char* equalSign = strchr(pParams, '=');
         if (equalSign && *(equalSign + 1) != '\0') {
             strncpy(pParamValue, equalSign + 1, sizeof(pParamValue) - 1);
             pParamValue[sizeof(pParamValue) - 1] = '\0';
+            
+            // URL decode the filename
+            urldecode(decodedValue, pParamValue);
+            LOGNOTE("Controller mounting file (decoded): %s", decodedValue);
 
-            // Write pParamValue to SD:/image.txt
-            FIL txtFile;
-            UINT bytesWritten;
-            FRESULT Result = f_open(&txtFile, "SD:/image.txt", FA_WRITE | FA_CREATE_ALWAYS);
-            if (Result != FR_OK) {
-                LOGERR("Cannot open image.txt for writing");
+            // Write decodedValue to SD:/image.txt
+            if (!saveMountedImageName(decodedValue)) {
                 strcpy((char*)m_pContentBuffer, "");
                 nLength = 0;
                 return HTTPInternalServerError;
             }
 
-            Result = f_write(&txtFile, pParamValue, strlen(pParamValue), &bytesWritten);
-            f_close(&txtFile);
-
-            if (Result != FR_OK || bytesWritten != strlen(pParamValue)) {
-                LOGERR("Failed to write to image.txt");
-                strcpy((char*)m_pContentBuffer, "");
-                nLength = 0;
-                return HTTPInternalServerError;
-            }
-    
-            CCueBinFileDevice* cueBinFileDevice = loadCueBinFileDevice(pParamValue);
+            CCueBinFileDevice* cueBinFileDevice = loadCueBinFileDevice(decodedValue);
             if (!cueBinFileDevice) {
                 LOGERR("Failed to get cueBinFileDevice");
                 return HTTPInternalServerError;
@@ -387,4 +469,14 @@ THTTPStatus CWebServer::GetContent (const char  *pPath,
     *pLength = nLength;
 
     return resultCode;
+}
+
+TShutdownMode CWebServer::GetShutdownMode(void) const 
+{
+    return s_GlobalShutdownMode;
+}
+
+void CWebServer::SetGlobalShutdownMode(TShutdownMode mode) 
+{
+    s_GlobalShutdownMode = mode;
 }

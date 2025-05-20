@@ -26,6 +26,7 @@
 #include <fatfs/ff.h>
 #include <linux/kernel.h>
 #include <discimage/cuebinfile.h>
+#include "kernel.h" // Include kernel.h to have access to TShutdownMode
 
 class CWebServer : public CHTTPDaemon
 {
@@ -35,6 +36,12 @@ public:
 
     // from CHTTPDaemon
     CHTTPDaemon *CreateWorker (CNetSubSystem *pNetSubSystem, CSocket *pSocket);
+    
+    // Get the shutdown mode (if any)
+    TShutdownMode GetShutdownMode(void) const;
+    
+    // Static method and variable for global shutdown state
+    static void SetGlobalShutdownMode(TShutdownMode mode);
 
 private:
     // from CHTTPDaemon
@@ -49,6 +56,10 @@ private:
     CActLED *m_pActLED;
     CUSBCDGadget *m_pCDGadget;
     u8 *m_pContentBuffer;    // Added content buffer as class member
+    TShutdownMode m_ShutdownMode;
+    
+    // Static shutdown mode that is shared across all instances
+    static TShutdownMode s_GlobalShutdownMode;
 };
 
 #endif
