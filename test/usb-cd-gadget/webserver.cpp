@@ -81,7 +81,8 @@ CWebServer::CWebServer (CNetSubSystem *pNetSubSystem, CUSBCDGadget *pCDGadget, C
 :       CHTTPDaemon (pNetSubSystem, pSocket, MAX_CONTENT_SIZE),
         m_pActLED (pActLED),
         m_pCDGadget (pCDGadget),
-        m_pContentBuffer(new u8[MAX_CONTENT_SIZE])
+        m_pContentBuffer(new u8[MAX_CONTENT_SIZE]),
+        m_ShutdownMode(ShutdownNone)
 {
 }
 
@@ -222,6 +223,8 @@ THTTPStatus generate_index_page(char *output_buffer, size_t max_len) {
         "\n"
         "<div>\n"
         "    <a class=\"button\" href=\"/list\">Load Another Image</a>\n"
+        "    <a class=\"button\" href=\"/system?action=reboot\" onclick=\"return confirm('Are you sure you want to reboot the device?');\">Reboot USBODE</a>\n"
+        "    <a class=\"button\" href=\"/system?action=shutdown\" onclick=\"return confirm('Are you sure you want to shut down the device?');\">Shutdown USBODE</a>\n"
         "</div>",
         currentImage);
     
@@ -243,6 +246,36 @@ THTTPStatus generate_mount_success_page(char *output_buffer, size_t max_len, con
         "    <a class=\"button\" href=\"/list\">Select Another File</a>\n"
         "</div>",
         filename);
+    
+    // Format the complete HTML page using the layout template
+    snprintf(output_buffer, max_len, HTML_LAYOUT, content, VERSION);
+    return HTTPOK;
+}
+
+THTTPStatus handle_system_operation(char *output_buffer, size_t max_len, const char *action, TShutdownMode *pShutdownMode) {
+    char content[MAX_CONTENT_SIZE];
+    
+    if (strcmp(action, "shutdown") == 0) {
+        snprintf(content, sizeof(content),
+            "<h3>System Shutdown</h3>\n"
+            "<div class=\"info-box\">\n"
+            "    <p>The system is shutting down...</p>\n"
+            "</div>");
+        
+        *pShutdownMode = ShutdownHalt;
+    } 
+    else if (strcmp(action, "reboot") == 0) {
+        snprintf(content, sizeof(content),
+            "<h3>System Reboot</h3>\n"
+            "<div class=\"info-box\">\n"
+            "    <p>The system is rebooting...</p>\n"
+            "</div>");
+        
+        *pShutdownMode = ShutdownReboot;
+    }
+    else {
+        return HTTPBadRequest;
+    }
     
     // Format the complete HTML page using the layout template
     snprintf(output_buffer, max_len, HTML_LAYOUT, content, VERSION);
@@ -286,6 +319,22 @@ THTTPStatus CWebServer::GetContent (const char  *pPath,
         nLength = strlen((char*)m_pContentBuffer);
         *ppContentType = "application/json; charset=utf-8";
     } 
+    else if (strcmp (pPath, "/system") == 0 && pParams && strncmp (pParams, "action=", 7) == 0) 
+    { 
+        // Handle system operation (shutdown/reboot)
+        const char* equalSign = strchr(pParams, '=');
+        if (equalSign && *(equalSign + 1) != '\0') {
+            resultCode = handle_system_operation((char*)m_pContentBuffer, MAX_CONTENT_SIZE, 
+                                               equalSign + 1, &m_ShutdownMode);
+            nLength = strlen((char*)m_pContentBuffer);
+            *ppContentType = "text/html; charset=utf-8";
+        } else {
+            LOGERR("system action value is missing");
+            strcpy((char*)m_pContentBuffer, "system action value is missing");
+            nLength = strlen((char*)m_pContentBuffer);
+            return HTTPBadRequest;
+        }
+    }
     else if (strcmp (pPath, "/mount") == 0 && pParams && strncmp (pParams, "file=", 5) == 0) 
     { 
         // Extract value (after '=')

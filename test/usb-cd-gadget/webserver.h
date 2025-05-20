@@ -35,6 +35,9 @@ public:
 
     // from CHTTPDaemon
     CHTTPDaemon *CreateWorker (CNetSubSystem *pNetSubSystem, CSocket *pSocket);
+    
+    // Get the shutdown mode (if any)
+    TShutdownMode GetShutdownMode(void) const { return m_ShutdownMode; }
 
 private:
     // from CHTTPDaemon
@@ -49,6 +52,7 @@ private:
     CActLED *m_pActLED;
     CUSBCDGadget *m_pCDGadget;
     u8 *m_pContentBuffer;    // Added content buffer as class member
+    TShutdownMode m_ShutdownMode;
 };
 
 #endif
