@@ -136,7 +136,11 @@ boolean CKernel::Initialize (void)
 
 TShutdownMode CKernel::Run (void)
 {
+	LOGNOTE ("=====================================");
+	LOGNOTE ("Welcome to USBODE"); 
 	LOGNOTE ("Compile time: " __DATE__ " " __TIME__);
+	LOGNOTE ("=====================================");
+
 
 	char imageName[MAX_FILENAME];
 	if (getCurrentMountedImage(imageName, sizeof(imageName))) {
