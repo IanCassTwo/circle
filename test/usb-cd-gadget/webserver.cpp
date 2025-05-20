@@ -225,7 +225,6 @@ THTTPStatus generate_index_page(char *output_buffer, size_t max_len) {
         "\n"
         "<div>\n"
         "    <a class=\"button\" href=\"/list\">Load Another Image</a>\n"
-        "    <a class=\"button\" href=\"/system?action=reboot\" onclick=\"return confirm('Are you sure you want to reboot the device?');\">Reboot USBODE</a>\n"
         "    <a class=\"button\" href=\"/system?action=shutdown\" onclick=\"return confirm('Are you sure you want to shut down the device?');\">Shutdown USBODE</a>\n"
         "</div>",
         currentImage);
