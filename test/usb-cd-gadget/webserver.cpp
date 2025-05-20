@@ -77,6 +77,8 @@ LOGMODULE ("kernel");
 
 static const char FromWebServer[] = "webserver";
 
+TShutdownMode CWebServer::s_GlobalShutdownMode = ShutdownNone;
+
 CWebServer::CWebServer (CNetSubSystem *pNetSubSystem, CUSBCDGadget *pCDGadget, CActLED *pActLED, CSocket *pSocket)
 :       CHTTPDaemon (pNetSubSystem, pSocket, MAX_CONTENT_SIZE),
         m_pActLED (pActLED),
@@ -262,7 +264,9 @@ THTTPStatus handle_system_operation(char *output_buffer, size_t max_len, const c
             "    <p>The system is shutting down...</p>\n"
             "</div>");
         
-        *pShutdownMode = ShutdownHalt;
+        // Set the global shutdown mode instead of the instance variable
+        CWebServer::SetGlobalShutdownMode(ShutdownHalt);
+        *pShutdownMode = ShutdownHalt;  // Also set the passed pointer for compatibility
     } 
     else if (strcmp(action, "reboot") == 0) {
         snprintf(content, sizeof(content),
@@ -271,7 +275,9 @@ THTTPStatus handle_system_operation(char *output_buffer, size_t max_len, const c
             "    <p>The system is rebooting...</p>\n"
             "</div>");
         
-        *pShutdownMode = ShutdownReboot;
+        // Set the global shutdown mode instead of the instance variable
+        CWebServer::SetGlobalShutdownMode(ShutdownReboot);
+        *pShutdownMode = ShutdownReboot;  // Also set the passed pointer for compatibility
     }
     else {
         return HTTPBadRequest;
@@ -447,4 +453,14 @@ THTTPStatus CWebServer::GetContent (const char  *pPath,
     *pLength = nLength;
 
     return resultCode;
+}
+
+TShutdownMode CWebServer::GetShutdownMode(void) const 
+{
+    return s_GlobalShutdownMode;
+}
+
+void CWebServer::SetGlobalShutdownMode(TShutdownMode mode) 
+{
+    s_GlobalShutdownMode = mode;
 }

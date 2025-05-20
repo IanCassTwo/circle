@@ -38,7 +38,10 @@ public:
     CHTTPDaemon *CreateWorker (CNetSubSystem *pNetSubSystem, CSocket *pSocket);
     
     // Get the shutdown mode (if any)
-    TShutdownMode GetShutdownMode(void) const { return m_ShutdownMode; }
+    TShutdownMode GetShutdownMode(void) const;
+    
+    // Static method and variable for global shutdown state
+    static void SetGlobalShutdownMode(TShutdownMode mode);
 
 private:
     // from CHTTPDaemon
@@ -54,6 +57,9 @@ private:
     CUSBCDGadget *m_pCDGadget;
     u8 *m_pContentBuffer;    // Added content buffer as class member
     TShutdownMode m_ShutdownMode;
+    
+    // Static shutdown mode that is shared across all instances
+    static TShutdownMode s_GlobalShutdownMode;
 };
 
 #endif
