@@ -23,10 +23,11 @@
 #include "util.h"
 #include <assert.h>
 
-#define MAX_CONTENT_SIZE        524288
-#define MAX_FILES       1024
-#define MAX_FILENAME    255
-#define VERSION         "2.0.0"
+#define MAX_CONTENT_SIZE        16384
+#define MAX_FILES               1024
+#define MAX_FILES_PER_PAGE      50
+#define MAX_FILENAME            255
+#define VERSION                 "2.0.1"
 
 // HTML template with CSS styling embedded
 static const char HTML_LAYOUT[] = 
@@ -99,82 +100,304 @@ CHTTPDaemon *CWebServer::CreateWorker (CNetSubSystem *pNetSubSystem, CSocket *pS
         return new CWebServer (pNetSubSystem, m_pCDGadget, m_pActLED, pSocket);
 }
 
-THTTPStatus list_files_as_table(char *output_buffer, size_t max_len) {
+THTTPStatus list_files_as_table(char *output_buffer, size_t max_len, const char *params = NULL) {
     DIR dir;
     FILINFO fno;
     FRESULT fr;
     char content[MAX_CONTENT_SIZE];
+    memset(content, 0, MAX_CONTENT_SIZE);  // Initialize buffer
+    
     size_t offset = 0;
-    char currentImage[MAX_FILENAME + 1]; // +1 for null terminator
-    if (getCurrentMountedImage(currentImage, sizeof(currentImage))) {
-            LOGNOTE("Found image filename %s", currentImage);
-    } else {
-            // Defaulting here lets the user get out of a hole
-            strcpy(currentImage, "image.iso");
-            LOGERR("Could not load image name, using default: %s", currentImage);
+    char currentImage[MAX_FILENAME + 1];
+    currentImage[0] = '\0';  // Initialize to empty string
+    
+    // Set pagination constants - reduce to avoid stack overflow
+    const int FILES_PER_PAGE = 25;  // Reduced from 50
+    int current_page = 1;
+    int total_pages = 1;
+    int total_files = 0;
+    int current_file_index = -1;
+    int page_with_current_file = 0;
+    
+    // Parse page parameter if exists
+    if (params != NULL) {
+        const char* page_param = strstr(params, "page=");
+        if (page_param) {
+            current_page = atoi(page_param + 5); // Skip "page="
+            if (current_page < 1) current_page = 1;
+        }
+    }
+    
+    // Get current mounted image name
+    if (!getCurrentMountedImage(currentImage, sizeof(currentImage))) {
+        // Defaulting here lets the user get out of a hole
+        strncpy(currentImage, "image.iso", MAX_FILENAME);
+        currentImage[MAX_FILENAME] = '\0'; // Ensure null termination
     }
 
-    fr = f_opendir(&dir, "/images");
-    if (fr != FR_OK) {
-        snprintf(output_buffer, max_len, "Error opening directory: %d", fr);
-        return HTTPInternalServerError;
-    }
-
-    // Make sure we have enough space for the header, full filename, and some additional HTML
-    // The HTML template needs approximately 200 characters plus the filename length
-    if (MAX_CONTENT_SIZE < 200 + MAX_FILENAME) {
-        LOGERR("Content buffer size too small for maximum filename length");
-        return HTTPInternalServerError;
-    }
-
-    offset += snprintf(content + offset, sizeof(content) - offset,
+    // Add header to content with safe checks
+    offset += snprintf(content + offset, sizeof(content) - offset - 1,
         "<h3>File Selection</h3>\n"
         "<div class=\"info-box\">\n"
         "    <p>Current File Loaded: <strong>%s</strong></p>\n"
         "    <p>To load a different ISO, select it. No disconnection between the OS and the USBODE will occur.</p>\n"
-        "</div>\n"
-        "<h4>Available Files:</h4>\n", 
+        "</div>\n", 
         currentImage);
-
-    int index = 0;
-    while (1) {
-        fr = f_readdir(&dir, &fno);
-        if (fr != FR_OK || fno.fname[0] == 0) break;
-
-        // Skip "." and ".."
-        if (fno.fname[0] == '.' && (fno.fname[1] == 0 || (fno.fname[1] == '.' && fno.fname[2] == 0))) {
-            continue;
-        }
-
-        // Check remaining space before adding a new file entry
-        // Each file entry requires the filename length * 2 (for href and display) plus ~60 chars for HTML
-        size_t entry_size = strlen(fno.fname) * 2 + 60;
-        if (sizeof(content) - offset <= entry_size) {
-            offset += snprintf(content + offset, sizeof(content) - offset, 
-                "<p>Too many files to display completely</p>");
-            break;
-        }
-
-        // Add file with alternating row colors
-        const char* rowClass = (index % 2 == 0) ? "file-link-even" : "file-link-odd";
-        offset += snprintf(content + offset, sizeof(content) - offset, 
-            "<div class=\"file-link %s\"><a href=\"/mount?file=%s\">%s</a></div>\n", 
-            rowClass, fno.fname, fno.fname);
-        index++;
+    
+    // Open directory
+    fr = f_opendir(&dir, "/images");
+    if (fr != FR_OK) {
+        offset += snprintf(content + offset, sizeof(content) - offset - 1,
+            "<p>Error opening directory: %d</p>", fr);
     }
-
-    // Make sure we have space for the footer
+    else {
+        // We'll collect all filenames first, sort them, then display the appropriate page
+        char **filenames = NULL;
+        int allocated_files = 0;
+        
+        // First pass: count total files
+        total_files = 0;
+        
+        while (1) {
+            fr = f_readdir(&dir, &fno);
+            if (fr != FR_OK || fno.fname[0] == 0) break;
+            
+            // Skip "." and ".."
+            if (fno.fname[0] == '.' && (fno.fname[1] == 0 || (fno.fname[1] == '.' && fno.fname[2] == 0))) {
+                continue;
+            }
+            
+            total_files++;
+        }
+        
+        f_closedir(&dir);
+        
+        // Allocate memory for filenames only if we have files
+        if (total_files > 0) {
+            filenames = new char*[total_files];
+            if (filenames) {
+                // Initialize pointers to NULL for safe cleanup later
+                for (int i = 0; i < total_files; i++) {
+                    filenames[i] = NULL;
+                }
+                
+                allocated_files = total_files;
+                
+                // Re-read directory and collect filenames
+                fr = f_opendir(&dir, "/images");
+                if (fr == FR_OK) {
+                    int file_index = 0;
+                    
+                    while (file_index < total_files) {
+                        fr = f_readdir(&dir, &fno);
+                        if (fr != FR_OK || fno.fname[0] == 0) break;
+                        
+                        // Skip "." and ".."
+                        if (fno.fname[0] == '.' && (fno.fname[1] == 0 || (fno.fname[1] == '.' && fno.fname[2] == 0))) {
+                            continue;
+                        }
+                        
+                        // Allocate memory for this filename
+                        size_t name_len = strlen(fno.fname);
+                        filenames[file_index] = new char[name_len + 1];
+                        
+                        if (filenames[file_index]) {
+                            // Copy the filename
+                            strncpy(filenames[file_index], fno.fname, name_len);
+                            filenames[file_index][name_len] = '\0';
+                            
+                            // Check if this is the current file
+                            if (strcmp(fno.fname, currentImage) == 0) {
+                                current_file_index = file_index;
+                            }
+                            
+                            file_index++;
+                        }
+                    }
+                    
+                    f_closedir(&dir);
+                    
+                    // Now sort all filenames using bubble sort
+                    for (int i = 0; i < file_index - 1; i++) {
+                        for (int j = 0; j < file_index - i - 1; j++) {
+                            if (strcasecmp(filenames[j], filenames[j+1]) > 0) {
+                                // Swap pointers
+                                char *temp = filenames[j];
+                                filenames[j] = filenames[j+1];
+                                filenames[j+1] = temp;
+                                
+                                // Update current_file_index if needed
+                                if (current_file_index == j) {
+                                    current_file_index = j + 1;
+                                } else if (current_file_index == j + 1) {
+                                    current_file_index = j;
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Now find where the current file is in the sorted list
+                    if (current_file_index >= 0) {
+                        page_with_current_file = (current_file_index / FILES_PER_PAGE) + 1;
+                    }
+                }
+            }
+        }
+        
+        // Calculate total pages
+        total_pages = (total_files + FILES_PER_PAGE - 1) / FILES_PER_PAGE;
+        if (total_pages < 1) total_pages = 1;
+        
+        // If we didn't specify a page and found the current file, go to its page
+        if ((params == NULL || strstr(params, "page=") == NULL) && page_with_current_file > 0) {
+            current_page = page_with_current_file;
+        }
+        
+        // Ensure current_page is in valid range
+        if (current_page > total_pages) current_page = total_pages;
+        if (current_page < 1) current_page = 1;
+        
+        offset += snprintf(content + offset, sizeof(content) - offset - 1,
+            "<h4>Available Files (Page %d of %d):</h4>\n", 
+            current_page, total_pages);
+        
+        // Display the sorted files for the current page
+        if (filenames && allocated_files > 0) {
+            // Calculate start and end indices for current page
+            int start_index = (current_page - 1) * FILES_PER_PAGE;
+            int end_index = start_index + FILES_PER_PAGE;
+            if (end_index > total_files) end_index = total_files;
+            
+            // Still process in small chunks to avoid memory issues
+            const int CHUNK_SIZE = 10;
+            int row_index = 0;
+            
+            for (int chunk_start = start_index; chunk_start < end_index; chunk_start += CHUNK_SIZE) {
+                int chunk_end = chunk_start + CHUNK_SIZE;
+                if (chunk_end > end_index) chunk_end = end_index;
+                
+                // Display files in this chunk
+                for (int i = chunk_start; i < chunk_end; i++) {
+                    if (i < allocated_files && filenames[i]) {
+                        // Check remaining space before adding a new file entry
+                        size_t entry_size = strlen(filenames[i]) * 2 + 200; // conservative estimate
+                        if (sizeof(content) - offset <= entry_size) {
+                            offset += snprintf(content + offset, sizeof(content) - offset - 1, 
+                                "<p>Too many files to display completely</p>");
+                            break;
+                        }
+                        
+                        // Add file with alternating row colors and highlight current
+                        const char* rowClass = (row_index % 2 == 0) ? "file-link-even" : "file-link-odd";
+                        row_index++;
+                        
+                        // Check if this is the currently loaded file
+                        bool is_current = (i == current_file_index);
+                        
+                        if (is_current) {
+                            // Highlight the current file
+                            offset += snprintf(content + offset, sizeof(content) - offset - 1, 
+                                "<div class=\"file-link %s\" style=\"font-weight:bold;border:2px solid #4CAF50;\">"
+                                "<a href=\"/mount?file=%s\">%s</a> (Current)</div>\n", 
+                                rowClass, filenames[i], filenames[i]);
+                        } else {
+                            offset += snprintf(content + offset, sizeof(content) - offset - 1, 
+                                "<div class=\"file-link %s\"><a href=\"/mount?file=%s\">%s</a></div>\n", 
+                                rowClass, filenames[i], filenames[i]);
+                        }
+                    }
+                }
+            }
+            
+            // Clean up allocated memory
+            for (int i = 0; i < allocated_files; i++) {
+                if (filenames[i]) {
+                    delete[] filenames[i];
+                }
+            }
+            delete[] filenames;
+        }
+        
+        // Add pagination controls with simplified layout
+        if (sizeof(content) - offset > 300) {
+            offset += snprintf(content + offset, sizeof(content) - offset - 1,
+                "<div style=\"margin-top: 20px; text-align: center;\">\n");
+            
+            // Previous page button
+            if (current_page > 1) {
+                offset += snprintf(content + offset, sizeof(content) - offset - 1,
+                    "<a class=\"button\" href=\"/list?page=%d\">&laquo; Previous</a>\n", current_page - 1);
+            } else {
+                offset += snprintf(content + offset, sizeof(content) - offset - 1,
+                    "<span class=\"button\" style=\"opacity: 0.5;\">&laquo; Previous</span>\n");
+            }
+            
+            // Simplified page navigation - just show first, current-1, current, current+1, last
+            if (current_page > 2) {
+                offset += snprintf(content + offset, sizeof(content) - offset - 1,
+                    "<a class=\"button\" href=\"/list?page=1\">1</a>\n");
+                
+                if (current_page > 3) {
+                    offset += snprintf(content + offset, sizeof(content) - offset - 1,
+                        "<span style=\"margin: 0 5px;\">...</span>\n");
+                }
+            }
+            
+            if (current_page > 1) {
+                offset += snprintf(content + offset, sizeof(content) - offset - 1,
+                    "<a class=\"button\" href=\"/list?page=%d\">%d</a>\n", 
+                    current_page - 1, current_page - 1);
+            }
+            
+            // Current page is highlighted
+            offset += snprintf(content + offset, sizeof(content) - offset - 1,
+                "<span class=\"button\" style=\"background-color:#1E4D8C;\">%d</span>\n", current_page);
+            
+            if (current_page < total_pages) {
+                offset += snprintf(content + offset, sizeof(content) - offset - 1,
+                    "<a class=\"button\" href=\"/list?page=%d\">%d</a>\n", 
+                    current_page + 1, current_page + 1);
+            }
+            
+            if (current_page < total_pages - 1) {
+                if (current_page < total_pages - 2) {
+                    offset += snprintf(content + offset, sizeof(content) - offset - 1,
+                        "<span style=\"margin: 0 5px;\">...</span>\n");
+                }
+                
+                offset += snprintf(content + offset, sizeof(content) - offset - 1,
+                    "<a class=\"button\" href=\"/list?page=%d\">%d</a>\n", 
+                    total_pages, total_pages);
+            }
+            
+            // Next page button
+            if (current_page < total_pages) {
+                offset += snprintf(content + offset, sizeof(content) - offset - 1,
+                    "<a class=\"button\" href=\"/list?page=%d\">Next &raquo;</a>\n", current_page + 1);
+            } else {
+                offset += snprintf(content + offset, sizeof(content) - offset - 1,
+                    "<span class=\"button\" style=\"opacity: 0.5;\">Next &raquo;</span>\n");
+            }
+            
+            offset += snprintf(content + offset, sizeof(content) - offset - 1, "</div>\n");
+        }
+    }
+    
+    // Add home button
     if (sizeof(content) - offset > 100) {
-        offset += snprintf(content + offset, sizeof(content) - offset,
-            "<div>\n"
+        offset += snprintf(content + offset, sizeof(content) - offset - 1,
+            "<div style=\"margin-top: 10px; text-align: center;\">\n"
             "    <a class=\"button\" href=\"/\">Return to Homepage</a>\n"
             "</div>");
     }
-
-    f_closedir(&dir);
+    
+    // Make sure content is null-terminated
+    content[sizeof(content) - 1] = '\0';
     
     // Format the complete HTML page using the layout template
     snprintf(output_buffer, max_len, HTML_LAYOUT, content, VERSION);
+    output_buffer[max_len - 1] = '\0'; // Ensure null-termination
+    
     return HTTPOK;
 }
 
@@ -183,6 +406,10 @@ THTTPStatus list_files_as_json(char *json_output, size_t max_len) {
     FILINFO fno;
     FRESULT fr;
     size_t offset = 0;
+    
+    // For filename sorting
+    char filenames[MAX_FILES][MAX_FILENAME + 1];
+    int total_files = 0;
 
     fr = f_opendir(&dir, "/images");
     if (fr != FR_OK) {
@@ -190,9 +417,7 @@ THTTPStatus list_files_as_json(char *json_output, size_t max_len) {
         return HTTPInternalServerError;
     }
 
-    offset += snprintf(json_output + offset, max_len - offset, "[");
-
-    int first = 1;
+    // First pass: collect all filenames
     while (1) {
         fr = f_readdir(&dir, &fno);
         if (fr != FR_OK || fno.fname[0] == 0) break;
@@ -201,14 +426,50 @@ THTTPStatus list_files_as_json(char *json_output, size_t max_len) {
         if (fno.fname[0] == '.' && (fno.fname[1] == 0 || (fno.fname[1] == '.' && fno.fname[2] == 0))) {
             continue;
         }
+        
+        // Check if we have room for more files
+        if (total_files >= MAX_FILES) {
+            LOGERR("Too many files, increase MAX_FILES");
+            break;
+        }
+        
+        // Store the filename
+        strncpy(filenames[total_files], fno.fname, MAX_FILENAME);
+        filenames[total_files][MAX_FILENAME] = '\0';
+        total_files++;
+    }
+    
+    f_closedir(&dir);
+    
+    // Sort the filenames (simple bubble sort)
+    for (int i = 0; i < total_files - 1; i++) {
+        for (int j = 0; j < total_files - i - 1; j++) {
+            if (strcasecmp(filenames[j], filenames[j+1]) > 0) {
+                // Swap filenames
+                char temp[MAX_FILENAME + 1];
+                strncpy(temp, filenames[j], MAX_FILENAME);
+                temp[MAX_FILENAME] = '\0';
+                
+                strncpy(filenames[j], filenames[j+1], MAX_FILENAME);
+                filenames[j][MAX_FILENAME] = '\0';
+                
+                strncpy(filenames[j+1], temp, MAX_FILENAME);
+                filenames[j+1][MAX_FILENAME] = '\0';
+            }
+        }
+    }
 
-        if (!first) {
+    offset += snprintf(json_output + offset, max_len - offset, "[");
+
+    // Add sorted filenames to JSON array
+    for (int i = 0; i < total_files; i++) {
+        // Add comma separator if not the first item
+        if (i > 0) {
             offset += snprintf(json_output + offset, max_len - offset, ",");
         }
-        first = 0;
 
         // Add filename to JSON array
-        offset += snprintf(json_output + offset, max_len - offset, "\"%s\"", fno.fname);
+        offset += snprintf(json_output + offset, max_len - offset, "\"%s\"", filenames[i]);
 
         if (offset >= max_len - MAX_FILENAME - 4) {  // prevent overflow
             break;
@@ -216,7 +477,6 @@ THTTPStatus list_files_as_json(char *json_output, size_t max_len) {
     }
 
     snprintf(json_output + offset, max_len - offset, "]");
-    f_closedir(&dir);
     return HTTPOK;
 }
 
@@ -333,8 +593,8 @@ THTTPStatus CWebServer::GetContent (const char  *pPath,
     } 
     else if (strcmp (pPath, "/list") == 0) 
     { 
-        // List images with HTML table formatting
-        resultCode = list_files_as_table((char*)m_pContentBuffer, MAX_CONTENT_SIZE);
+        // List images with HTML table formatting, passing parameters for pagination
+        resultCode = list_files_as_table((char*)m_pContentBuffer, MAX_CONTENT_SIZE, pParams);
         nLength = strlen((char*)m_pContentBuffer);
         *ppContentType = "text/html; charset=utf-8";
     }
