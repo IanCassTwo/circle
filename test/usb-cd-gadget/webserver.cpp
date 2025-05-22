@@ -488,6 +488,7 @@ THTTPStatus generate_index_page(char *output_buffer, size_t max_len) {
             // Defaulting here lets the user get out of a hole
             strcpy(currentImage, "image.iso");
             LOGERR("Could not load image name, using default: %s", currentImage);
+            CKernel::GetInstance()->WriteToLogFileFmt("Could not load image name %s, falling back to default which is image.iso", currentImage);
     }
     
     char content[MAX_CONTENT_SIZE];
@@ -645,7 +646,7 @@ THTTPStatus CWebServer::GetContent (const char  *pPath,
             // URL decode the filename
             urldecode(decodedValue, pParamValue);
             LOGNOTE("Mounting file (decoded): %s", decodedValue);
-
+            CKernel::GetInstance()->WriteToLogFileFmt("Mounting file (decoded): %s", decodedValue);
             if (!saveMountedImageName(decodedValue)) {
                 strcpy((char*)m_pContentBuffer, "");
                 nLength = 0;
@@ -655,6 +656,7 @@ THTTPStatus CWebServer::GetContent (const char  *pPath,
             CCueBinFileDevice* cueBinFileDevice = loadCueBinFileDevice(decodedValue);
             if (!cueBinFileDevice) {
                 LOGERR("Failed to get cueBinFileDevice");
+                CKernel::GetInstance()->WriteToLogFileSimple("Failed to get cueBinFileDevice");
                 return HTTPInternalServerError;
             }
 
@@ -719,6 +721,7 @@ THTTPStatus CWebServer::GetContent (const char  *pPath,
     if (*pLength < nLength)
     {
         LOGERR("Increase MAX_CONTENT_SIZE to at least %u", nLength);
+        CKernel::GetInstance()->WriteToLogFileFmt("Increase MAX_CONTENT_SIZE to at least %u", nLength);
         return HTTPInternalServerError;
     }
 

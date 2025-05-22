@@ -39,6 +39,7 @@
 #include <circle/net/netsubsystem.h>
 #include <circle/sched/scheduler.h>
 #include <circle/net/mdnspublisher.h>
+#include "enhanced_logger.h"
 
 enum TShutdownMode
 {
@@ -57,8 +58,18 @@ public:
 	boolean SetDevice(char *imageName);
 
 	TShutdownMode Run (void);
+	
+	// Direct file logging helpers that can be called from other classes
+	boolean WriteToLogFileSimple(const char *pMessage); // Renamed from WriteToLogFile
+	boolean WriteToLogFile(const char *pSource, TLogSeverity Severity, const char *pMessage);
+	boolean WriteToLogFileFmt(const char *pFormat, ...); // Renamed from WriteToLogFile
+	
+	// Static instance accessor
+	static CKernel* GetInstance() { return s_pInstance; }
 
 private:
+	static CKernel* s_pInstance;
+
 	// do not change this order
 	CActLED			m_ActLED;
 	CKernelOptions		m_Options;
@@ -68,7 +79,7 @@ private:
 	CExceptionHandler	m_ExceptionHandler;
 	CInterruptSystem	m_Interrupt;
 	CTimer			m_Timer;
-	CLogger			m_Logger;
+	CEnhancedLogger		m_Logger;   // Changed from CLogger to CEnhancedLogger
 	CScheduler              m_Scheduler;
 
 	CEMMCDevice		m_EMMC;

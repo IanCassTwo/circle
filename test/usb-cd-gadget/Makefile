@@ -4,7 +4,7 @@
 
 CIRCLEHOME = ../..
 
-OBJS	= main.o kernel.o webserver.o ftpdaemon.o ftpworker.o util.o
+OBJS	= main.o kernel.o webserver.o ftpdaemon.o ftpworker.o util.o enhanced_logger.o
 
 LIBS	= $(CIRCLEHOME)/lib/usb/libusb.a \
 	  $(CIRCLEHOME)/lib/usb/gadget/libusbgadget.a \
@@ -14,9 +14,9 @@ LIBS	= $(CIRCLEHOME)/lib/usb/libusb.a \
 	  $(CIRCLEHOME)/addon/wlan/hostap/wpa_supplicant/libwpa_supplicant.a \
           $(CIRCLEHOME)/addon/wlan/libwlan.a \
           $(CIRCLEHOME)/lib/sched/libsched.a \
-	  $(CIRCLEHOME)/addon/linux/liblinuxemu.a \
 	  $(CIRCLEHOME)/lib/fs/libfs.a \
 	  $(CIRCLEHOME)/lib/libcircle.a \
+	  $(CIRCLEHOME)/addon/linux/liblinuxemu.a \
 	  $(CIRCLEHOME)/addon/SDCard/libsdcard.a \
 	  $(CIRCLEHOME)/addon/discimage/libdiscimage.a \
 	  $(CIRCLEHOME)/addon/cueparser/libcueparser.a
