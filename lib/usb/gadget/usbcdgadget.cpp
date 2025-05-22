@@ -96,8 +96,8 @@ const CUSBCDGadget::TUSBMSTGadgetConfigurationDescriptor CUSBCDGadget::s_Configu
 const char *const CUSBCDGadget::s_StringDescriptor[] =
 {
 	"\x04\x03\x09\x04",		// Language ID
-	"Circle",
-	"CDROM Gadget"
+	"USBODE",
+	"USB Optical Disk Emulator"
 };
 
 CUSBCDGadget::CUSBCDGadget (CInterruptSystem *pInterruptSystem, CCueBinFileDevice *pDevice)
