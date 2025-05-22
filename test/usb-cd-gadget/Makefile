@@ -19,6 +19,7 @@ LIBS	= $(CIRCLEHOME)/lib/usb/libusb.a \
 	  $(CIRCLEHOME)/lib/libcircle.a \
 	  $(CIRCLEHOME)/addon/SDCard/libsdcard.a \
 	  $(CIRCLEHOME)/addon/discimage/libdiscimage.a \
+	  $(CIRCLEHOME)/addon/filelogdaemon/libfilelogdaemon.a \
 	  $(CIRCLEHOME)/addon/cueparser/libcueparser.a
 
 include $(CIRCLEHOME)/Rules.mk

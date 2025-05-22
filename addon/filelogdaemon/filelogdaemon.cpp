@@ -40,6 +40,7 @@ CFileLogDaemon::CFileLogDaemon (const char *pLogFilePath)
 	s_pThis = this;
 
 	SetName (FromFileLogDaemon);
+	Initialize();
 }
 
 boolean CFileLogDaemon::Initialize()
@@ -149,6 +150,8 @@ boolean CFileLogDaemon::LogMessage (TLogSeverity Severity,
 	MLOGERR(FromFileLogDaemon, "Failed to write to log file!");
 	return FALSE;
     }
+
+    f_sync(&m_LogFile);
 
     return TRUE;
 }

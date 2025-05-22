@@ -27,6 +27,7 @@
 #define DRIVE "SD:"
 #define FIRMWARE_PATH   DRIVE "/firmware/"
 #define CONFIG_FILE     DRIVE "/wpa_supplicant.conf"
+#define LOG_FILE     DRIVE "/logfile.txt"
 #define HOSTNAME "CDROM"
 
 LOGMODULE ("kernel");
@@ -76,6 +77,7 @@ boolean CKernel::Initialize (void)
 		LOGNOTE("Initialized logger");
 	}
 
+
 	if (bOK)
 	{
 		bOK = m_Interrupt.Initialize ();
@@ -105,14 +107,6 @@ boolean CKernel::Initialize (void)
 		LOGNOTE("Initialized filesystem");
         }
 
-	/*
-	if(bOK)
-	{
-		bOK = m_CDGadget.Initialize ();
-		LOGNOTE("Initialized cdrom");
-	}
-	*/
-
 	if (bOK)
         {
                 bOK = m_WLAN.Initialize ();
@@ -136,6 +130,10 @@ boolean CKernel::Initialize (void)
 
 TShutdownMode CKernel::Run (void)
 {
+
+	// Start the file logging daemon
+	new CFileLogDaemon(LOG_FILE);
+
 	LOGNOTE ("=====================================");
 	LOGNOTE ("Welcome to USBODE"); 
 	LOGNOTE ("Compile time: " __DATE__ " " __TIME__);

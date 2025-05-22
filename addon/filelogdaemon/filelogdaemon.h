@@ -37,7 +37,7 @@ class CFileLogDaemon : public CTask
 public:
 	CFileLogDaemon (const char *pLogFilePath);
 	~CFileLogDaemon (void);
-
+	boolean Initialize();
 	void Run (void);
 
 private:
@@ -49,7 +49,6 @@ private:
 	static void PanicHandler (void);
 
 private:
-	boolean Initialize();
 	CSynchronizationEvent m_Event;
 	static CFileLogDaemon *s_pThis;
 	boolean m_bFileInitialized;

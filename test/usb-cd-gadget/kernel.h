@@ -39,6 +39,7 @@
 #include <circle/net/netsubsystem.h>
 #include <circle/sched/scheduler.h>
 #include <circle/net/mdnspublisher.h>
+#include <filelogdaemon/filelogdaemon.h>
 
 enum TShutdownMode
 {
