@@ -25,6 +25,7 @@
 #include <circle/logger.h>
 #include <circle/sysconfig.h>
 #include <circle/util.h>
+#include <circle/koptions.h>
 #include <assert.h>
 #include <stddef.h>
 #include <math.h>
@@ -78,8 +79,7 @@ const CUSBCDGadget::TUSBMSTGadgetConfigurationDescriptor CUSBCDGadget::s_Configu
 		DESCRIPTOR_ENDPOINT,
 		0x81, 			//IN number 1
 		2,			// bmAttributes (Bulk)
-		//512,			// wMaxPacketSize
-		64,			// wMaxPacketSize
+		static_cast<uint16_t>(CKernelOptions::Get()->GetUSBFullSpeed() ? 64 : 512), //wMaxPacketSize
 		0			// bInterval
 	},
 	{
@@ -87,8 +87,7 @@ const CUSBCDGadget::TUSBMSTGadgetConfigurationDescriptor CUSBCDGadget::s_Configu
 		DESCRIPTOR_ENDPOINT,
 		0x02, 			//OUT number 2
 		2,			// bmAttributes (Bulk)
-		64,			// wMaxPacketSize
-		//512,			// wMaxPacketSize
+		static_cast<uint16_t>(CKernelOptions::Get()->GetUSBFullSpeed() ? 64 : 512), //wMaxPacketSize
 		0   			// bInterval
 	}
 };
@@ -101,8 +100,8 @@ const char *const CUSBCDGadget::s_StringDescriptor[] =
 };
 
 CUSBCDGadget::CUSBCDGadget (CInterruptSystem *pInterruptSystem, CCueBinFileDevice *pDevice)
-:	CDWUSBGadget (pInterruptSystem, FullSpeed),
-//:	CDWUSBGadget (pInterruptSystem, HighSpeed),
+: CDWUSBGadget(pInterruptSystem,
+               CKernelOptions::Get()->GetUSBFullSpeed() ? FullSpeed : HighSpeed),
 	m_pDevice (pDevice),
 	m_pEP {nullptr, nullptr, nullptr}
 {
