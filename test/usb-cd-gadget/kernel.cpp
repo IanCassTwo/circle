@@ -152,8 +152,12 @@ TShutdownMode CKernel::Run (void)
 
 	CCueBinFileDevice* cueBinFileDevice = loadCueBinFileDevice(imageName);
 	if (!cueBinFileDevice) {
-		LOGERR("Failed to get cueBinFileDevice");
-		return ShutdownHalt;
+		LOGERR("Failed to get cueBinFileDevice, defaulting to \"image.iso\"");
+		cueBinFileDevice = loadCueBinFileDevice("image.iso");
+		if (!cueBinFileDevice) {
+			LOGERR("Still failed to get cueBinFileDevice, I give up");
+			return ShutdownHalt;
+		}
 	}
 
 	m_CDGadget.SetDevice (cueBinFileDevice);
