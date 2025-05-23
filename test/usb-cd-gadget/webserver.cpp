@@ -514,14 +514,13 @@ THTTPStatus CWebServer::generate_mount_success_page(char *output_buffer, size_t 
         "</div>\n"
         "\n"
         "<div>\n"
-        "    <a class=\"button\" href=\"/\">Return to Homepage</a>\n"
-        "    <a class=\"button\" href=\"/list\">Select Another File</a>\n"
+        "    <a class=\"button\" href=\"/list\">Return to File List</a>\n"
         "</div>";
     size_t content_buffer_size = strlen(html) + MAX_FILENAME + 1;
     char* content = new (HEAP_LOW) char[content_buffer_size];
 
     snprintf(content, content_buffer_size,
-	html,
+        html,
         filename);
     
     // Format the complete HTML page using the layout template
@@ -579,15 +578,22 @@ THTTPStatus CWebServer::GetContent (const char  *pPath,
 
     if ((strcmp (pPath, "/") == 0 || strcmp (pPath, "/index.html") == 0))
     {
-        // Generate the index page with the HTML template
-        resultCode = generate_index_page((char*)m_pContentBuffer, MAX_CONTENT_SIZE);
+        // Redirect to the list page instead of generating a homepage
+        LOGNOTE("Redirecting to /list from %s", pPath);
+        
+        // Create a simple redirect page
+        snprintf((char*)m_pContentBuffer, MAX_CONTENT_SIZE,
+            "<html><head><meta http-equiv=\"refresh\" content=\"0;URL='/list'\">"
+            "<title>Redirecting...</title></head>"
+            "<body>Redirecting to file list...</body></html>");
+            
         nLength = strlen((char*)m_pContentBuffer);
         *ppContentType = "text/html; charset=utf-8";
     } 
     else if (strcmp (pPath, "/list") == 0) 
     { 
         // List images with HTML table formatting, passing parameters for pagination
-	LOGNOTE("Calling list_files_as_table");
+        LOGNOTE("Calling list_files_as_table");
         resultCode = list_files_as_table((char*)m_pContentBuffer, MAX_CONTENT_SIZE, pParams);
         nLength = strlen((char*)m_pContentBuffer);
         *ppContentType = "text/html; charset=utf-8";
