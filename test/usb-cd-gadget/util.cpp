@@ -152,11 +152,13 @@ CCueBinFileDevice* loadCueBinFileDevice(const char* imageName) {
 bool getCurrentMountedImage(char* outFilename, size_t maxLen) {
     FIL txtFile;
     UINT bytesRead = 0;
-
     FRESULT result = f_open(&txtFile, "SD:/image.txt", FA_READ | FA_OPEN_EXISTING);
-    if (result != FR_OK) {
-        strncpy(outFilename, "None", maxLen);
-        outFilename[maxLen - 1] = '\0';
+
+    if (result == FR_NO_FILE) {
+        // File doesn't exist: create and populate with default
+        return saveDefaultImageName(outFilename, maxLen);
+    } else if (result != FR_OK) {
+        // Other error opening the file
         return false;
     }
 
@@ -164,12 +166,12 @@ bool getCurrentMountedImage(char* outFilename, size_t maxLen) {
     f_close(&txtFile);
 
     if (result != FR_OK) {
-        strncpy(outFilename, "image.iso", maxLen);
-        outFilename[maxLen - 1] = '\0';
+        // Read failed
         return false;
     }
 
-    // Null-terminate
+    if (bytesRead >= maxLen)
+        bytesRead = maxLen - 1;
     outFilename[bytesRead] = '\0';
 
     // Remove trailing \r and \n
@@ -178,7 +180,17 @@ bool getCurrentMountedImage(char* outFilename, size_t maxLen) {
         outFilename[i--] = '\0';
     }
 
+    // If the file was empty or contained only whitespace
+    if (outFilename[0] == '\0') {
+        return saveDefaultImageName(outFilename, maxLen);
+    }
+
     return true;
+}
+
+bool saveDefaultImageName(char* outFilename, size_t maxLen) {
+    snprintf(outFilename, maxLen, "image.iso");
+    return saveMountedImageName(outFilename);
 }
 
 bool saveMountedImageName(const char* imageName) {
@@ -190,16 +202,18 @@ bool saveMountedImageName(const char* imageName) {
         return false;
     }
 
-    result = f_write(&txtFile, imageName, strlen(imageName), &bytesWritten);
+    size_t len = strlen(imageName);
+    result = f_write(&txtFile, imageName, len, &bytesWritten);
     f_close(&txtFile);
 
-    if (result != FR_OK || bytesWritten != strlen(imageName)) {
+    if (result != FR_OK || bytesWritten != len) {
         LOGERR("Failed to write to image.txt");
         return false;
     }
 
     return true;
 }
+
 
 // Check if a character is a hexadecimal digit (0-9, A-F, a-f)
 bool is_hex_digit(char c) {

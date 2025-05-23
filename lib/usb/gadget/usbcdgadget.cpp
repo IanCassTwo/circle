@@ -205,7 +205,6 @@ void CUSBCDGadget::SetDevice (CCueBinFileDevice* dev)
 
 	MLOGNOTE ("CUSBCDGadget::InitDevice", "entered");
 
-	// TODO Extract getleadoutLBA into method of its own
 	// TODO Extract getDataSectorSize into a method of its own
 	const CUETrackInfo* trackInfo = nullptr;
 	const CUETrackInfo* lastTrackInfo = nullptr;

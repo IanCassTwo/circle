@@ -26,7 +26,8 @@
 
 #define DRIVE "SD:"
 #define FIRMWARE_PATH   DRIVE "/firmware/"
-#define CONFIG_FILE     DRIVE "/wpa_supplicant.conf"
+#define SUPPLICANT_CONFIG_FILE     DRIVE "/wpa_supplicant.conf"
+#define CONFIG_FILE     DRIVE "/config.txt"
 #define LOG_FILE     DRIVE "/logfile.txt"
 #define HOSTNAME "CDROM"
 
@@ -39,7 +40,7 @@ CKernel::CKernel (void)
 	m_EMMC (&m_Interrupt, &m_Timer, &m_ActLED),
 	m_WLAN (FIRMWARE_PATH),
         m_Net (0, 0, 0, 0, HOSTNAME, NetDeviceTypeWLAN),
-        m_WPASupplicant (CONFIG_FILE),
+        m_WPASupplicant (SUPPLICANT_CONFIG_FILE),
 	m_CDGadget (&m_Interrupt)
 {
 	//m_ActLED.Blink (5);	// show we are alive
@@ -131,8 +132,22 @@ boolean CKernel::Initialize (void)
 TShutdownMode CKernel::Run (void)
 {
 
+	// Load our config file loader
+	CPropertiesFatFsFile Properties (CONFIG_FILE, &m_FileSystem);
+	if (!Properties.Load ())
+	{
+		LOGERR("Error loading properties from %s (line %u)",
+				CONFIG_FILE, Properties.GetErrorLine ());
+		return ShutdownHalt;
+	}
+	Properties.SelectSection ("usbode");
+
 	// Start the file logging daemon
-	new CFileLogDaemon(LOG_FILE);
+	const char* logfile = Properties.GetString("logfile", nullptr);
+	if (logfile) {
+		new CFileLogDaemon(logfile);
+		LOGNOTE("Started log file daemon");
+	}
 
 	LOGNOTE ("=====================================");
 	LOGNOTE ("Welcome to USBODE"); 
@@ -140,22 +155,13 @@ TShutdownMode CKernel::Run (void)
 	LOGNOTE ("=====================================");
 
 
-	char imageName[MAX_FILENAME];
-	if (getCurrentMountedImage(imageName, sizeof(imageName))) {
-	    LOGNOTE("Found image filename %s", imageName);
-	} else {
-	    strcpy(imageName, "image.iso");
-	    LOGERR("Could not load image name, using default: %s", imageName);
-	}
+	const char* imageName = Properties.GetString("current_image", "image.iso");
+	LOGNOTE("Found image filename %s", imageName);
 
 	CCueBinFileDevice* cueBinFileDevice = loadCueBinFileDevice(imageName);
 	if (!cueBinFileDevice) {
-		LOGERR("Failed to get cueBinFileDevice, defaulting to \"image.iso\"");
-		cueBinFileDevice = loadCueBinFileDevice("image.iso");
-		if (!cueBinFileDevice) {
-			LOGERR("Still failed to get cueBinFileDevice, I give up");
-			return ShutdownHalt;
-		}
+		LOGERR("Failed to load cueBinFileDevice %s", imageName);
+		return ShutdownHalt;
 	}
 
 	m_CDGadget.SetDevice (cueBinFileDevice);
@@ -197,7 +203,7 @@ TShutdownMode CKernel::Run (void)
 
 		// Start the Web Server
 		if (m_Net.IsRunning() && pCWebServer == nullptr) {
-			pCWebServer = new CWebServer (&m_Net, &m_CDGadget, &m_ActLED) ;
+			pCWebServer = new CWebServer (&m_Net, &m_CDGadget, &m_ActLED, &Properties) ;
 			LOGNOTE("Started Webserver");
                 }
 
