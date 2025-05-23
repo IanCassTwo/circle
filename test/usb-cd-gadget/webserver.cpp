@@ -392,7 +392,7 @@ THTTPStatus CWebServer::list_files_as_table(char *output_buffer, size_t max_len,
 
     // Format the complete HTML page using the layout template
     snprintf(output_buffer, max_len, HTML_LAYOUT, content, VERSION);
-    delete(content);
+    delete[] content;  // Fixed: Use delete[] for array allocation
     return HTTPOK;
 }
 
@@ -501,7 +501,7 @@ THTTPStatus CWebServer::generate_index_page(char *output_buffer, size_t max_len)
     
     // Format the complete HTML page using the layout template
     snprintf(output_buffer, max_len, HTML_LAYOUT, content, VERSION);
-    delete(content);
+    delete[] content;  // Fixed: Use delete[] for array allocation
     return HTTPOK;
 }
 
@@ -525,7 +525,7 @@ THTTPStatus CWebServer::generate_mount_success_page(char *output_buffer, size_t 
     
     // Format the complete HTML page using the layout template
     snprintf(output_buffer, max_len, HTML_LAYOUT, content, VERSION);
-    delete(content);
+    delete[] content;  // Fixed: Use delete[] for array allocation
     return HTTPOK;
 }
 
