@@ -640,6 +640,7 @@ THTTPStatus CWebServer::GetContent (const char  *pPath,
 
             // Save current mounted image name
             m_pProperties->SetString("current_image", decodedValue);
+	    m_pProperties->Save();
 
 	    // Load the image
             CCueBinFileDevice* cueBinFileDevice = loadCueBinFileDevice(decodedValue);
@@ -677,6 +678,7 @@ THTTPStatus CWebServer::GetContent (const char  *pPath,
 
             // Save current mounted image name
             m_pProperties->SetString("current_image", decodedValue);
+	    m_pProperties->Save();
 
             CCueBinFileDevice* cueBinFileDevice = loadCueBinFileDevice(decodedValue);
             if (!cueBinFileDevice) {
