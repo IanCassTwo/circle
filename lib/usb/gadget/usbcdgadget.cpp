@@ -251,22 +251,6 @@ void CUSBCDGadget::SetDevice (CCueBinFileDevice* dev)
 	MLOGNOTE("CUSBCDGadget::InitDeviceSize", "Block size is %d, leadOutLBA is %d, m_CDReady = %d", block_size, leadOutLBA, m_CDReady);
 }
 
-/*
-
-u64 CUSBCDGadget::GetBlocks (void) const
-{
-	MLOGNOTE ("CUSBCDGadget::GetBlocks", "entered");
-	return m_nDeviceBlocks;
-}
-
-//use when device does not report size
-void CUSBCDGadget::SetDeviceBlocks(u64 numBlocks)
-{
-	MLOGNOTE ("CUSBCDGadget::SetDeviceBlocks", "entered");
-	InitDeviceSize(numBlocks);
-}
-*/
-
 void CUSBCDGadget::CreateDevice (void)
 {
 	MLOGNOTE ("CUSBCDGadget::GetDescriptor", "entered");
@@ -896,7 +880,7 @@ void CUSBCDGadget::HandleSCSICommand()
 		}
         case 0x5a: // Mode Sense (10)
 		{
-                        MLOGNOTE("CUSBCDGadget::HandleSCSICommand", "Mode Sense (10)");
+                        //MLOGNOTE("CUSBCDGadget::HandleSCSICommand", "Mode Sense (10)");
 
 			//TODO: static for now
 			memcpy(m_InBuffer, &m_ModeSense10Reply, SIZE_MODE_SENSE10_REPLY);
