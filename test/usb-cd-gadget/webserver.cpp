@@ -22,12 +22,15 @@
 #include <circle/string.h>
 #include "util.h"
 #include <assert.h>
+#include <circle/new.h>
 
 #define MAX_CONTENT_SIZE        16384
 #define MAX_FILES               1024
 #define MAX_FILES_PER_PAGE      50
 #define MAX_FILENAME            255
 #define VERSION                 "2.0.1"
+#define DRIVE "SD:"
+#define CONFIG_FILE     DRIVE "/config.txt"
 
 // HTML template with CSS styling embedded
 static const char HTML_LAYOUT[] = 
@@ -74,17 +77,16 @@ static const u8 s_Index[] =
 #include "index.h"
 ;
 
-LOGMODULE ("kernel");
-
-static const char FromWebServer[] = "webserver";
+LOGMODULE ("webserver");
 
 TShutdownMode CWebServer::s_GlobalShutdownMode = ShutdownNone;
 
-CWebServer::CWebServer (CNetSubSystem *pNetSubSystem, CUSBCDGadget *pCDGadget, CActLED *pActLED, CSocket *pSocket)
+CWebServer::CWebServer (CNetSubSystem *pNetSubSystem, CUSBCDGadget *pCDGadget, CActLED *pActLED, CPropertiesFatFsFile *pProperties, CSocket *pSocket)
 :       CHTTPDaemon (pNetSubSystem, pSocket, MAX_CONTENT_SIZE),
         m_pActLED (pActLED),
         m_pCDGadget (pCDGadget),
         m_pContentBuffer(new u8[MAX_CONTENT_SIZE]),
+	m_pProperties(pProperties),
         m_ShutdownMode(ShutdownNone)
 {
 }
@@ -97,20 +99,19 @@ CWebServer::~CWebServer (void)
 
 CHTTPDaemon *CWebServer::CreateWorker (CNetSubSystem *pNetSubSystem, CSocket *pSocket)
 {
-        return new CWebServer (pNetSubSystem, m_pCDGadget, m_pActLED, pSocket);
+        return new CWebServer (pNetSubSystem, m_pCDGadget, m_pActLED, m_pProperties, pSocket);
 }
 
-THTTPStatus list_files_as_table(char *output_buffer, size_t max_len, const char *params = NULL) {
+THTTPStatus CWebServer::list_files_as_table(char *output_buffer, size_t max_len, const char *params) 
+{
     DIR dir;
     FILINFO fno;
     FRESULT fr;
-    char content[MAX_CONTENT_SIZE];
-    memset(content, 0, MAX_CONTENT_SIZE);  // Initialize buffer
+
+    char* content = new (HEAP_LOW) char[MAX_CONTENT_SIZE];
     
     size_t offset = 0;
-    char currentImage[MAX_FILENAME + 1];
-    currentImage[0] = '\0';  // Initialize to empty string
-    
+
     // Set pagination constants - reduce to avoid stack overflow
     const int FILES_PER_PAGE = 25;  // Reduced from 50
     int current_page = 1;
@@ -128,15 +129,11 @@ THTTPStatus list_files_as_table(char *output_buffer, size_t max_len, const char 
         }
     }
     
-    // Get current mounted image name
-    if (!getCurrentMountedImage(currentImage, sizeof(currentImage))) {
-        // Defaulting here lets the user get out of a hole
-        strncpy(currentImage, "image.iso", MAX_FILENAME);
-        currentImage[MAX_FILENAME] = '\0'; // Ensure null termination
-    }
+    // Get current mounted image name (defaulting if necessary);
+    const char* currentImage = m_pProperties->GetString("current_image", "image.iso");
 
     // Add header to content with safe checks
-    offset += snprintf(content + offset, sizeof(content) - offset - 1,
+    offset += snprintf(content + offset, MAX_CONTENT_SIZE - offset - 1,
         "<h3>File Selection</h3>\n"
         "<div class=\"info-box\">\n"
         "    <p>Current File Loaded: <strong>%s</strong></p>\n"
@@ -147,7 +144,7 @@ THTTPStatus list_files_as_table(char *output_buffer, size_t max_len, const char 
     // Open directory
     fr = f_opendir(&dir, "/images");
     if (fr != FR_OK) {
-        offset += snprintf(content + offset, sizeof(content) - offset - 1,
+        offset += snprintf(content + offset, MAX_CONTENT_SIZE - offset - 1,
             "<p>Error opening directory: %d</p>", fr);
     }
     else {
@@ -196,7 +193,7 @@ THTTPStatus list_files_as_table(char *output_buffer, size_t max_len, const char 
                         if (fno.fname[0] == '.' && (fno.fname[1] == 0 || (fno.fname[1] == '.' && fno.fname[2] == 0))) {
                             continue;
                         }
-                        
+
                         // Allocate memory for this filename
                         size_t name_len = strlen(fno.fname);
                         filenames[file_index] = new char[name_len + 1];
@@ -257,7 +254,7 @@ THTTPStatus list_files_as_table(char *output_buffer, size_t max_len, const char 
         if (current_page > total_pages) current_page = total_pages;
         if (current_page < 1) current_page = 1;
         
-        offset += snprintf(content + offset, sizeof(content) - offset - 1,
+        offset += snprintf(content + offset, MAX_CONTENT_SIZE - offset - 1,
             "<h4>Available Files (Page %d of %d):</h4>\n", 
             current_page, total_pages);
         
@@ -281,8 +278,8 @@ THTTPStatus list_files_as_table(char *output_buffer, size_t max_len, const char 
                     if (i < allocated_files && filenames[i]) {
                         // Check remaining space before adding a new file entry
                         size_t entry_size = strlen(filenames[i]) * 2 + 200; // conservative estimate
-                        if (sizeof(content) - offset <= entry_size) {
-                            offset += snprintf(content + offset, sizeof(content) - offset - 1, 
+                        if (MAX_CONTENT_SIZE - offset <= entry_size) {
+                            offset += snprintf(content + offset, MAX_CONTENT_SIZE - offset - 1, 
                                 "<p>Too many files to display completely</p>");
                             break;
                         }
@@ -296,12 +293,12 @@ THTTPStatus list_files_as_table(char *output_buffer, size_t max_len, const char 
                         
                         if (is_current) {
                             // Highlight the current file
-                            offset += snprintf(content + offset, sizeof(content) - offset - 1, 
+                            offset += snprintf(content + offset, MAX_CONTENT_SIZE - offset - 1, 
                                 "<div class=\"file-link %s\" style=\"font-weight:bold;border:2px solid #4CAF50;\">"
                                 "<a href=\"/mount?file=%s\">%s</a> (Current)</div>\n", 
                                 rowClass, filenames[i], filenames[i]);
                         } else {
-                            offset += snprintf(content + offset, sizeof(content) - offset - 1, 
+                            offset += snprintf(content + offset, MAX_CONTENT_SIZE - offset - 1, 
                                 "<div class=\"file-link %s\"><a href=\"/mount?file=%s\">%s</a></div>\n", 
                                 rowClass, filenames[i], filenames[i]);
                         }
@@ -319,89 +316,86 @@ THTTPStatus list_files_as_table(char *output_buffer, size_t max_len, const char 
         }
         
         // Add pagination controls with simplified layout
-        if (sizeof(content) - offset > 300) {
-            offset += snprintf(content + offset, sizeof(content) - offset - 1,
+        if (MAX_CONTENT_SIZE - offset > 300) {
+            offset += snprintf(content + offset, MAX_CONTENT_SIZE - offset - 1,
                 "<div style=\"margin-top: 20px; text-align: center;\">\n");
             
             // Previous page button
             if (current_page > 1) {
-                offset += snprintf(content + offset, sizeof(content) - offset - 1,
+                offset += snprintf(content + offset, MAX_CONTENT_SIZE - offset - 1,
                     "<a class=\"button\" href=\"/list?page=%d\">&laquo; Previous</a>\n", current_page - 1);
             } else {
-                offset += snprintf(content + offset, sizeof(content) - offset - 1,
+                offset += snprintf(content + offset, MAX_CONTENT_SIZE - offset - 1,
                     "<span class=\"button\" style=\"opacity: 0.5;\">&laquo; Previous</span>\n");
             }
             
             // Simplified page navigation - just show first, current-1, current, current+1, last
             if (current_page > 2) {
-                offset += snprintf(content + offset, sizeof(content) - offset - 1,
+                offset += snprintf(content + offset, MAX_CONTENT_SIZE - offset - 1,
                     "<a class=\"button\" href=\"/list?page=1\">1</a>\n");
                 
                 if (current_page > 3) {
-                    offset += snprintf(content + offset, sizeof(content) - offset - 1,
+                    offset += snprintf(content + offset, MAX_CONTENT_SIZE - offset - 1,
                         "<span style=\"margin: 0 5px;\">...</span>\n");
                 }
             }
             
             if (current_page > 1) {
-                offset += snprintf(content + offset, sizeof(content) - offset - 1,
+                offset += snprintf(content + offset, MAX_CONTENT_SIZE - offset - 1,
                     "<a class=\"button\" href=\"/list?page=%d\">%d</a>\n", 
                     current_page - 1, current_page - 1);
             }
             
             // Current page is highlighted
-            offset += snprintf(content + offset, sizeof(content) - offset - 1,
+            offset += snprintf(content + offset, MAX_CONTENT_SIZE - offset - 1,
                 "<span class=\"button\" style=\"background-color:#1E4D8C;\">%d</span>\n", current_page);
             
             if (current_page < total_pages) {
-                offset += snprintf(content + offset, sizeof(content) - offset - 1,
+                offset += snprintf(content + offset, MAX_CONTENT_SIZE - offset - 1,
                     "<a class=\"button\" href=\"/list?page=%d\">%d</a>\n", 
                     current_page + 1, current_page + 1);
             }
             
             if (current_page < total_pages - 1) {
                 if (current_page < total_pages - 2) {
-                    offset += snprintf(content + offset, sizeof(content) - offset - 1,
+                    offset += snprintf(content + offset, MAX_CONTENT_SIZE - offset - 1,
                         "<span style=\"margin: 0 5px;\">...</span>\n");
                 }
                 
-                offset += snprintf(content + offset, sizeof(content) - offset - 1,
+                offset += snprintf(content + offset, MAX_CONTENT_SIZE - offset - 1,
                     "<a class=\"button\" href=\"/list?page=%d\">%d</a>\n", 
                     total_pages, total_pages);
             }
             
             // Next page button
             if (current_page < total_pages) {
-                offset += snprintf(content + offset, sizeof(content) - offset - 1,
+                offset += snprintf(content + offset, MAX_CONTENT_SIZE - offset - 1,
                     "<a class=\"button\" href=\"/list?page=%d\">Next &raquo;</a>\n", current_page + 1);
             } else {
-                offset += snprintf(content + offset, sizeof(content) - offset - 1,
+                offset += snprintf(content + offset, MAX_CONTENT_SIZE - offset - 1,
                     "<span class=\"button\" style=\"opacity: 0.5;\">Next &raquo;</span>\n");
             }
             
-            offset += snprintf(content + offset, sizeof(content) - offset - 1, "</div>\n");
+            offset += snprintf(content + offset, MAX_CONTENT_SIZE - offset - 1, "</div>\n");
         }
     }
     
     // Add home button
-    if (sizeof(content) - offset > 100) {
-        offset += snprintf(content + offset, sizeof(content) - offset - 1,
+    if (MAX_CONTENT_SIZE - offset > 100) {
+        offset += snprintf(content + offset, MAX_CONTENT_SIZE - offset - 1,
             "<div style=\"margin-top: 10px; text-align: center;\">\n"
             "    <a class=\"button\" href=\"/\">Return to Homepage</a>\n"
             "</div>");
     }
-    
-    // Make sure content is null-terminated
-    content[sizeof(content) - 1] = '\0';
-    
+
     // Format the complete HTML page using the layout template
     snprintf(output_buffer, max_len, HTML_LAYOUT, content, VERSION);
-    output_buffer[max_len - 1] = '\0'; // Ensure null-termination
-    
+    delete(content);
     return HTTPOK;
 }
 
-THTTPStatus list_files_as_json(char *json_output, size_t max_len) {
+THTTPStatus CWebServer::list_files_as_json(char *json_output, size_t max_len) 
+{
     DIR dir;
     FILINFO fno;
     FRESULT fr;
@@ -480,25 +474,12 @@ THTTPStatus list_files_as_json(char *json_output, size_t max_len) {
     return HTTPOK;
 }
 
-THTTPStatus generate_index_page(char *output_buffer, size_t max_len) {
-    char currentImage[MAX_FILENAME + 1]; // +1 for null terminator
-    if (getCurrentMountedImage(currentImage, sizeof(currentImage))) {
-            LOGNOTE("Found image filename %s", currentImage);
-    } else {
-            // Defaulting here lets the user get out of a hole
-            strcpy(currentImage, "image.iso");
-            LOGERR("Could not load image name, using default: %s", currentImage);
-    }
-    
-    char content[MAX_CONTENT_SIZE];
-    
-    // Make sure we have enough space for the HTML template and the full filename
-    if (MAX_CONTENT_SIZE < 300 + MAX_FILENAME) {
-        LOGERR("Content buffer size too small for maximum filename length");
-        return HTTPInternalServerError;
-    }
-    
-    snprintf(content, sizeof(content),
+THTTPStatus CWebServer::generate_index_page(char *output_buffer, size_t max_len) 
+{
+    // Get current mounted image name (defaulting if necessary);
+    const char* currentImage = m_pProperties->GetString("current_image", "image.iso");
+
+    const char* html = 
         "<h3>Welcome to USBODE</h3>\n"
         "<div class=\"info-box\">\n"
         "    <p>Currently Serving: <strong>%s</strong></p>\n"
@@ -507,17 +488,24 @@ THTTPStatus generate_index_page(char *output_buffer, size_t max_len) {
         "<div>\n"
         "    <a class=\"button\" href=\"/list\">Load Another Image</a>\n"
         "    <a class=\"button\" href=\"/system?action=shutdown\" onclick=\"return confirm('Are you sure you want to shut down the device?');\">Shutdown USBODE</a>\n"
-        "</div>",
+        "</div>";
+
+    size_t content_buffer_size = strlen(html) + MAX_FILENAME + 1;
+    char* content = new (HEAP_LOW) char[content_buffer_size];
+
+    snprintf(content, content_buffer_size,
+	html,
         currentImage);
     
     // Format the complete HTML page using the layout template
     snprintf(output_buffer, max_len, HTML_LAYOUT, content, VERSION);
+    delete(content);
     return HTTPOK;
 }
 
-THTTPStatus generate_mount_success_page(char *output_buffer, size_t max_len, const char *filename) {
-    char content[MAX_CONTENT_SIZE];
-    snprintf(content, sizeof(content),
+THTTPStatus CWebServer::generate_mount_success_page(char *output_buffer, size_t max_len, const char *filename) 
+{
+    const char* html = 
         "<h3>Mounting File</h3>\n"
         "<div class=\"info-box\">\n"
         "    <p>Successfully mounted: <strong>%s</strong></p>\n"
@@ -526,34 +514,39 @@ THTTPStatus generate_mount_success_page(char *output_buffer, size_t max_len, con
         "<div>\n"
         "    <a class=\"button\" href=\"/\">Return to Homepage</a>\n"
         "    <a class=\"button\" href=\"/list\">Select Another File</a>\n"
-        "</div>",
+        "</div>";
+    size_t content_buffer_size = strlen(html) + MAX_FILENAME + 1;
+    char* content = new (HEAP_LOW) char[content_buffer_size];
+
+    snprintf(content, content_buffer_size,
+	html,
         filename);
     
     // Format the complete HTML page using the layout template
     snprintf(output_buffer, max_len, HTML_LAYOUT, content, VERSION);
+    delete(content);
     return HTTPOK;
 }
 
-THTTPStatus handle_system_operation(char *output_buffer, size_t max_len, const char *action, TShutdownMode *pShutdownMode) {
-    char content[MAX_CONTENT_SIZE];
+THTTPStatus CWebServer::handle_system_operation(char *content, size_t max_len, const char *action, TShutdownMode *pShutdownMode) {
     
     if (strcmp(action, "shutdown") == 0) {
-        snprintf(content, sizeof(content),
+        snprintf(content, MAX_CONTENT_SIZE - 1, HTML_LAYOUT,
             "<h3>System Shutdown</h3>\n"
             "<div class=\"info-box\">\n"
             "    <p>The system is shutting down...</p>\n"
-            "</div>");
+            "</div>", VERSION);
         
         // Set the global shutdown mode instead of the instance variable
         CWebServer::SetGlobalShutdownMode(ShutdownHalt);
         *pShutdownMode = ShutdownHalt;  // Also set the passed pointer for compatibility
     } 
     else if (strcmp(action, "reboot") == 0) {
-        snprintf(content, sizeof(content),
+        snprintf(content, MAX_CONTENT_SIZE - 1, HTML_LAYOUT,
             "<h3>System Reboot</h3>\n"
             "<div class=\"info-box\">\n"
             "    <p>The system is rebooting...</p>\n"
-            "</div>");
+            "</div>", VERSION);
         
         // Set the global shutdown mode instead of the instance variable
         CWebServer::SetGlobalShutdownMode(ShutdownReboot);
@@ -563,8 +556,6 @@ THTTPStatus handle_system_operation(char *output_buffer, size_t max_len, const c
         return HTTPBadRequest;
     }
     
-    // Format the complete HTML page using the layout template
-    snprintf(output_buffer, max_len, HTML_LAYOUT, content, VERSION);
     return HTTPOK;
 }
 
@@ -594,6 +585,7 @@ THTTPStatus CWebServer::GetContent (const char  *pPath,
     else if (strcmp (pPath, "/list") == 0) 
     { 
         // List images with HTML table formatting, passing parameters for pagination
+	LOGNOTE("Calling list_files_as_table");
         resultCode = list_files_as_table((char*)m_pContentBuffer, MAX_CONTENT_SIZE, pParams);
         nLength = strlen((char*)m_pContentBuffer);
         *ppContentType = "text/html; charset=utf-8";
@@ -646,18 +638,16 @@ THTTPStatus CWebServer::GetContent (const char  *pPath,
             urldecode(decodedValue, pParamValue);
             LOGNOTE("Mounting file (decoded): %s", decodedValue);
 
-            if (!saveMountedImageName(decodedValue)) {
-                strcpy((char*)m_pContentBuffer, "");
-                nLength = 0;
-                return HTTPInternalServerError;
-            }
+            // Save current mounted image name
+            m_pProperties->SetString("current_image", decodedValue);
+	    m_pProperties->Save();
 
+	    // Load the image
             CCueBinFileDevice* cueBinFileDevice = loadCueBinFileDevice(decodedValue);
             if (!cueBinFileDevice) {
                 LOGERR("Failed to get cueBinFileDevice");
                 return HTTPInternalServerError;
             }
-
             m_pCDGadget->SetDevice(cueBinFileDevice);
             
             // Generate a success page
@@ -686,12 +676,9 @@ THTTPStatus CWebServer::GetContent (const char  *pPath,
             urldecode(decodedValue, pParamValue);
             LOGNOTE("Controller mounting file (decoded): %s", decodedValue);
 
-            // Write decodedValue to SD:/image.txt
-            if (!saveMountedImageName(decodedValue)) {
-                strcpy((char*)m_pContentBuffer, "");
-                nLength = 0;
-                return HTTPInternalServerError;
-            }
+            // Save current mounted image name
+            m_pProperties->SetString("current_image", decodedValue);
+	    m_pProperties->Save();
 
             CCueBinFileDevice* cueBinFileDevice = loadCueBinFileDevice(decodedValue);
             if (!cueBinFileDevice) {
@@ -727,6 +714,8 @@ THTTPStatus CWebServer::GetContent (const char  *pPath,
     memcpy (pBuffer, m_pContentBuffer, nLength);
 
     *pLength = nLength;
+
+    LOGNOTE("Returning from GetContent %d", nLength);
 
     return resultCode;
 }

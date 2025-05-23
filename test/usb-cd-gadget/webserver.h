@@ -26,12 +26,13 @@
 #include <fatfs/ff.h>
 #include <linux/kernel.h>
 #include <discimage/cuebinfile.h>
+#include <Properties/propertiesfatfsfile.h>
 #include "kernel.h" // Include kernel.h to have access to TShutdownMode
 
 class CWebServer : public CHTTPDaemon
 {
 public:
-    CWebServer (CNetSubSystem *pNetSubSystem, CUSBCDGadget *pCDGadget, CActLED *pActLED, CSocket *pSocket = 0);
+    CWebServer (CNetSubSystem *pNetSubSystem, CUSBCDGadget *pCDGadget, CActLED *pActLED, CPropertiesFatFsFile *pProperties, CSocket *pSocket = 0);
     ~CWebServer (void);
 
     // from CHTTPDaemon
@@ -51,11 +52,17 @@ private:
                           u8          *pBuffer,
                           unsigned    *pLength,
                           const char **ppContentType);
+    THTTPStatus generate_index_page(char *output_buffer, size_t max_len);
+    THTTPStatus list_files_as_table(char *output_buffer, size_t max_len, const char *params = nullptr);
+    THTTPStatus list_files_as_json(char *json_output, size_t max_len);
+    THTTPStatus generate_mount_success_page(char *output_buffer, size_t max_len, const char *filename);
+    THTTPStatus handle_system_operation(char *output_buffer, size_t max_len, const char *action, TShutdownMode *pShutdownMode);
     
 private:
     CActLED *m_pActLED;
     CUSBCDGadget *m_pCDGadget;
     u8 *m_pContentBuffer;    // Added content buffer as class member
+    CPropertiesFatFsFile *m_pProperties;
     TShutdownMode m_ShutdownMode;
     
     // Static shutdown mode that is shared across all instances
