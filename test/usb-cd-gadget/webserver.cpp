@@ -139,7 +139,9 @@ THTTPStatus CWebServer::list_files_as_table(char *output_buffer, size_t max_len,
         "<h3>File Selection</h3>\n"
         "<div class=\"info-box\">\n"
         "    <p>Current File Loaded: <strong>%s</strong></p>\n"
-        "    <p>To load a different ISO, select it. No disconnection between the OS and the USBODE will occur.</p>\n"
+        "</div>\n"
+        "<div style=\"text-align: center; margin-bottom: 15px;\">\n"
+        "    <a class=\"button\" href=\"/system?action=shutdown\" onclick=\"return confirm('Are you sure you want to shut down the device?');\">Shutdown USBODE</a>\n"
         "</div>\n", 
         currentImage);
     
@@ -382,17 +384,20 @@ THTTPStatus CWebServer::list_files_as_table(char *output_buffer, size_t max_len,
         }
     }
     
-    // Add home button
+    // Remove the "Return to Homepage" button section
     if (MAX_CONTENT_SIZE - offset > 100) {
+        // Remove this entire block - no need for a homepage button
+        /*
         offset += snprintf(content + offset, MAX_CONTENT_SIZE - offset - 1,
             "<div style=\"margin-top: 10px; text-align: center;\">\n"
             "    <a class=\"button\" href=\"/\">Return to Homepage</a>\n"
             "</div>");
+        */
     }
 
     // Format the complete HTML page using the layout template
     snprintf(output_buffer, max_len, HTML_LAYOUT, content, VERSION);
-    delete[] content;  // Fixed: Use delete[] for array allocation
+    delete[] content;
     return HTTPOK;
 }
 
@@ -473,35 +478,6 @@ THTTPStatus CWebServer::list_files_as_json(char *json_output, size_t max_len)
     }
 
     snprintf(json_output + offset, max_len - offset, "]");
-    return HTTPOK;
-}
-
-THTTPStatus CWebServer::generate_index_page(char *output_buffer, size_t max_len) 
-{
-    // Get current mounted image name (defaulting if necessary);
-    const char* currentImage = m_pProperties->GetString("current_image", "image.iso");
-
-    const char* html = 
-        "<h3>Welcome to USBODE</h3>\n"
-        "<div class=\"info-box\">\n"
-        "    <p>Currently Serving: <strong>%s</strong></p>\n"
-        "</div>\n"
-        "\n"
-        "<div>\n"
-        "    <a class=\"button\" href=\"/list\">Load Another Image</a>\n"
-        "    <a class=\"button\" href=\"/system?action=shutdown\" onclick=\"return confirm('Are you sure you want to shut down the device?');\">Shutdown USBODE</a>\n"
-        "</div>";
-
-    size_t content_buffer_size = strlen(html) + MAX_FILENAME + 1;
-    char* content = new (HEAP_LOW) char[content_buffer_size];
-
-    snprintf(content, content_buffer_size,
-	html,
-        currentImage);
-    
-    // Format the complete HTML page using the layout template
-    snprintf(output_buffer, max_len, HTML_LAYOUT, content, VERSION);
-    delete[] content;  // Fixed: Use delete[] for array allocation
     return HTTPOK;
 }
 
