@@ -134,14 +134,11 @@ THTTPStatus CWebServer::list_files_as_table(char *output_buffer, size_t max_len,
     // Get current mounted image name (defaulting if necessary);
     const char* currentImage = m_pProperties->GetString("current_image", "image.iso");
 
-    // Add header to content with safe checks
+    // Add header to content with safe checks - REMOVED SHUTDOWN BUTTON FROM HERE
     offset += snprintf(content + offset, MAX_CONTENT_SIZE - offset - 1,
         "<h3>File Selection</h3>\n"
         "<div class=\"info-box\">\n"
         "    <p>Current File Loaded: <strong>%s</strong></p>\n"
-        "</div>\n"
-        "<div style=\"text-align: center; margin-bottom: 15px;\">\n"
-        "    <a class=\"button\" href=\"/system?action=shutdown\" onclick=\"return confirm('Are you sure you want to shut down the device?');\">Shutdown USBODE</a>\n"
         "</div>\n", 
         currentImage);
     
@@ -381,18 +378,18 @@ THTTPStatus CWebServer::list_files_as_table(char *output_buffer, size_t max_len,
             }
             
             offset += snprintf(content + offset, MAX_CONTENT_SIZE - offset - 1, "</div>\n");
+            
+            // ADD SHUTDOWN BUTTON HERE - after pagination
+            offset += snprintf(content + offset, MAX_CONTENT_SIZE - offset - 1,
+                "<div style=\"margin-top: 20px; text-align: center;\">\n"
+                "    <a class=\"button\" href=\"/system?action=shutdown\" "
+                "       style=\"background-color:#d9534f;\" "
+                "       onclick=\"return confirm('Are you sure you want to shut down the device?');\">Shutdown USBODE</a>\n"
+                "    <a class=\"button\" href=\"/system?action=reboot\" "
+                "       style=\"background-color:#f0ad4e;\" "
+                "       onclick=\"return confirm('Are you sure you want to reboot the device?');\">Reboot USBODE</a>\n"
+                "</div>\n");
         }
-    }
-    
-    // Remove the "Return to Homepage" button section
-    if (MAX_CONTENT_SIZE - offset > 100) {
-        // Remove this entire block - no need for a homepage button
-        /*
-        offset += snprintf(content + offset, MAX_CONTENT_SIZE - offset - 1,
-            "<div style=\"margin-top: 10px; text-align: center;\">\n"
-            "    <a class=\"button\" href=\"/\">Return to Homepage</a>\n"
-            "</div>");
-        */
     }
 
     // Format the complete HTML page using the layout template
