@@ -382,12 +382,7 @@ THTTPStatus CWebServer::list_files_as_table(char *output_buffer, size_t max_len,
             // ADD SHUTDOWN BUTTON HERE - after pagination
             offset += snprintf(content + offset, MAX_CONTENT_SIZE - offset - 1,
                 "<div style=\"margin-top: 20px; text-align: center;\">\n"
-                "    <a class=\"button\" href=\"/system?action=shutdown\" "
-                "       style=\"background-color:#d9534f;\" "
-                "       onclick=\"return confirm('Are you sure you want to shut down the device?');\">Shutdown USBODE</a>\n"
-                "    <a class=\"button\" href=\"/system?action=reboot\" "
-                "       style=\"background-color:#f0ad4e;\" "
-                "       onclick=\"return confirm('Are you sure you want to reboot the device?');\">Reboot USBODE</a>\n"
+                "    <a class=\"button\" href=\"/system?action=shutdown\">Shutdown USBODE</a>\n"
                 "</div>\n");
         }
     }
