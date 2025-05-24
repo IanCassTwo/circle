@@ -27,6 +27,9 @@ make
 cd ${projectRoot}/addon/filelogdaemon
 make clean
 make
+cd ${projectRoot}/addon/Properties
+make clean
+make
 cd ${projectRoot}/test/usb-cd-gadget
 make clean
 make
