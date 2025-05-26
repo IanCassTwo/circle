@@ -86,9 +86,11 @@ CWebServer::CWebServer (CNetSubSystem *pNetSubSystem, CUSBCDGadget *pCDGadget, C
         m_pActLED (pActLED),
         m_pCDGadget (pCDGadget),
         m_pContentBuffer(new u8[MAX_CONTENT_SIZE]),
-	m_pProperties(pProperties),
+        m_pProperties(pProperties),
         m_ShutdownMode(ShutdownNone)
 {
+    // Select the correct section for all property operations
+    m_pProperties->SelectSection("usbode");
 }
 
 CWebServer::~CWebServer (void)
@@ -132,12 +134,11 @@ THTTPStatus CWebServer::list_files_as_table(char *output_buffer, size_t max_len,
     // Get current mounted image name (defaulting if necessary);
     const char* currentImage = m_pProperties->GetString("current_image", "image.iso");
 
-    // Add header to content with safe checks
+    // Add header to content with safe checks - REMOVED SHUTDOWN BUTTON FROM HERE
     offset += snprintf(content + offset, MAX_CONTENT_SIZE - offset - 1,
         "<h3>File Selection</h3>\n"
         "<div class=\"info-box\">\n"
         "    <p>Current File Loaded: <strong>%s</strong></p>\n"
-        "    <p>To load a different ISO, select it. No disconnection between the OS and the USBODE will occur.</p>\n"
         "</div>\n", 
         currentImage);
     
@@ -377,20 +378,18 @@ THTTPStatus CWebServer::list_files_as_table(char *output_buffer, size_t max_len,
             }
             
             offset += snprintf(content + offset, MAX_CONTENT_SIZE - offset - 1, "</div>\n");
+            
+            // ADD SHUTDOWN BUTTON HERE - after pagination
+            offset += snprintf(content + offset, MAX_CONTENT_SIZE - offset - 1,
+                "<div style=\"margin-top: 20px; text-align: center;\">\n"
+                "    <a class=\"button\" href=\"/system?action=shutdown\">Shutdown USBODE</a>\n"
+                "</div>\n");
         }
-    }
-    
-    // Add home button
-    if (MAX_CONTENT_SIZE - offset > 100) {
-        offset += snprintf(content + offset, MAX_CONTENT_SIZE - offset - 1,
-            "<div style=\"margin-top: 10px; text-align: center;\">\n"
-            "    <a class=\"button\" href=\"/\">Return to Homepage</a>\n"
-            "</div>");
     }
 
     // Format the complete HTML page using the layout template
     snprintf(output_buffer, max_len, HTML_LAYOUT, content, VERSION);
-    delete(content);
+    delete[] content;
     return HTTPOK;
 }
 
@@ -474,35 +473,6 @@ THTTPStatus CWebServer::list_files_as_json(char *json_output, size_t max_len)
     return HTTPOK;
 }
 
-THTTPStatus CWebServer::generate_index_page(char *output_buffer, size_t max_len) 
-{
-    // Get current mounted image name (defaulting if necessary);
-    const char* currentImage = m_pProperties->GetString("current_image", "image.iso");
-
-    const char* html = 
-        "<h3>Welcome to USBODE</h3>\n"
-        "<div class=\"info-box\">\n"
-        "    <p>Currently Serving: <strong>%s</strong></p>\n"
-        "</div>\n"
-        "\n"
-        "<div>\n"
-        "    <a class=\"button\" href=\"/list\">Load Another Image</a>\n"
-        "    <a class=\"button\" href=\"/system?action=shutdown\" onclick=\"return confirm('Are you sure you want to shut down the device?');\">Shutdown USBODE</a>\n"
-        "</div>";
-
-    size_t content_buffer_size = strlen(html) + MAX_FILENAME + 1;
-    char* content = new (HEAP_LOW) char[content_buffer_size];
-
-    snprintf(content, content_buffer_size,
-	html,
-        currentImage);
-    
-    // Format the complete HTML page using the layout template
-    snprintf(output_buffer, max_len, HTML_LAYOUT, content, VERSION);
-    delete(content);
-    return HTTPOK;
-}
-
 THTTPStatus CWebServer::generate_mount_success_page(char *output_buffer, size_t max_len, const char *filename) 
 {
     const char* html = 
@@ -512,19 +482,18 @@ THTTPStatus CWebServer::generate_mount_success_page(char *output_buffer, size_t 
         "</div>\n"
         "\n"
         "<div>\n"
-        "    <a class=\"button\" href=\"/\">Return to Homepage</a>\n"
-        "    <a class=\"button\" href=\"/list\">Select Another File</a>\n"
+        "    <a class=\"button\" href=\"/list\">Return to File List</a>\n"
         "</div>";
     size_t content_buffer_size = strlen(html) + MAX_FILENAME + 1;
     char* content = new (HEAP_LOW) char[content_buffer_size];
 
     snprintf(content, content_buffer_size,
-	html,
+        html,
         filename);
     
     // Format the complete HTML page using the layout template
     snprintf(output_buffer, max_len, HTML_LAYOUT, content, VERSION);
-    delete(content);
+    delete[] content;  // Fixed: Use delete[] for array allocation
     return HTTPOK;
 }
 
@@ -577,15 +546,22 @@ THTTPStatus CWebServer::GetContent (const char  *pPath,
 
     if ((strcmp (pPath, "/") == 0 || strcmp (pPath, "/index.html") == 0))
     {
-        // Generate the index page with the HTML template
-        resultCode = generate_index_page((char*)m_pContentBuffer, MAX_CONTENT_SIZE);
+        // Redirect to the list page instead of generating a homepage
+        LOGNOTE("Redirecting to /list from %s", pPath);
+        
+        // Create a simple redirect page
+        snprintf((char*)m_pContentBuffer, MAX_CONTENT_SIZE,
+            "<html><head><meta http-equiv=\"refresh\" content=\"0;URL='/list'\">"
+            "<title>Redirecting...</title></head>"
+            "<body>Redirecting to file list...</body></html>");
+            
         nLength = strlen((char*)m_pContentBuffer);
         *ppContentType = "text/html; charset=utf-8";
     } 
     else if (strcmp (pPath, "/list") == 0) 
     { 
         // List images with HTML table formatting, passing parameters for pagination
-	LOGNOTE("Calling list_files_as_table");
+        LOGNOTE("Calling list_files_as_table");
         resultCode = list_files_as_table((char*)m_pContentBuffer, MAX_CONTENT_SIZE, pParams);
         nLength = strlen((char*)m_pContentBuffer);
         *ppContentType = "text/html; charset=utf-8";

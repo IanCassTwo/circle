@@ -52,7 +52,6 @@ private:
                           u8          *pBuffer,
                           unsigned    *pLength,
                           const char **ppContentType);
-    THTTPStatus generate_index_page(char *output_buffer, size_t max_len);
     THTTPStatus list_files_as_table(char *output_buffer, size_t max_len, const char *params = nullptr);
     THTTPStatus list_files_as_json(char *json_output, size_t max_len);
     THTTPStatus generate_mount_success_page(char *output_buffer, size_t max_len, const char *filename);
