@@ -88,7 +88,9 @@ CWebServer::CWebServer (CNetSubSystem *pNetSubSystem, CUSBCDGadget *pCDGadget, C
         m_pContentBuffer(new u8[MAX_CONTENT_SIZE]),
 	m_pProperties(pProperties),
         m_ShutdownMode(ShutdownNone)
+	 // Select the correct section for all property operations
 {
+    m_pProperties->SelectSection("usbode");
 }
 
 CWebServer::~CWebServer (void)

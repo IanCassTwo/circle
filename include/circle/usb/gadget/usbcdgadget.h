@@ -31,6 +31,7 @@
 #include <circle/synchronize.h>
 #include <circle/macros.h>
 #include <circle/types.h>
+#include <circle/new.h>
 #include <discimage/cuebinfile.h>
 #include <cueparser/cueparser.h>
 
@@ -97,8 +98,7 @@ struct TUSBCDRequestSenseReply   //14 bytes
 	u8 bAddlSenseCodeQual;
 	u8 bFieldReplaceUnitCode;
 	u8 bSKSVetc;
-	u16           sFieldPointer;
-	u16           sReserved;
+	u8 sKeySpecific[3];
 }
 PACKED;
 #define SIZE_RSR 14
@@ -231,9 +231,14 @@ struct TUSBCDModeSense10Reply {
     u16 modeDataLength;
     u8  mediumType;
     u8  deviceSpecific;
-    u8  reserved[4];
+    u8  reserved0;
+    u16 blockDescriptorLength;
+    u8  longLBA;
+    u8  page;
+    u8  pageLength;
+    u8  capabilities[66];
 } PACKED;
-# define SIZE_MODE_SENSE10_REPLY 8
+# define SIZE_MODE_SENSE10_REPLY 76
 
 struct TUSBCDGetConfigurationReply {
     u32 dataLength;       // Number of bytes following this field
@@ -308,10 +313,18 @@ private:
 	void HandleSCSICommand();
 
 	void SendCSW();
+	const CUETrackInfo* GetTrackInfoForLBA (u32 lba);
+	int GetSkipbytesForTrack(const CUETrackInfo* trackInfo);
+	int GetSkipbytes();
+	int GetMediumType ();
+
+	int GetBlocksize();
+	int GetBlocksizeForTrack(const CUETrackInfo* trackInfo);
 
 	void InitDeviceSize(u64 blocks);
-	u32 getLeadOutLBA(const CUETrackInfo* lasttrack);
-	u32 getAddress(u32 lba, int msf);
+	u32 GetLeadoutLBA();
+	int GetLastTrackNumber();
+	u32 GetAddress(u32 lba, int msf);
 	u32 lba_to_msf(u32 lba);
 
 private:
@@ -362,9 +375,9 @@ private:
 	TUSBCDCBW m_CBW;
 	TUSBCDCSW m_CSW;
 
-	TUSBCDInquiryReply m_InqReply {0x05,0x80,0x00,0x02,0x1F,0,0,0,{'C','i','r','c','l','e',0,0},
-                                        {'C','i','r','c','l','e',' ','C','D','R','O','M',0,0,0,0},
-                                        {'0','0','0',0}};
+	TUSBCDInquiryReply m_InqReply {0x05,0x80,0x02,0x02,0x1F,0,0,0,{'U','S','B','O','D','E',0,0},
+                                        {'U','S','B','O','D','E',' ','C','D','R','O','M',0,0,0,0},
+                                        {'0','0','0','1'}};
 	TUSBUintSerialNumberPage m_InqSerialReply {0x80,0x00, 0x0000, 0x04, {'0','0','0',0}};
 
 	TUSBSupportedVPDPage m_InqVPDReply {0x00, 0x00, 0x0000, 0x01, 0x80};
@@ -375,7 +388,36 @@ private:
 		htonl(2048)
 	};
 
-	TUSBCDRequestSenseReply m_ReqSenseReply;
+	TUSBCDRequestSenseReply m_ReqSenseReply = {
+		0x70,		// current error
+		0x00,		// reserved
+		0x00,		// Sense Key
+				// 0x00: NO SENSE
+				// 0x01: RECOVERED ERROR
+				// 0x02: NOT READY
+				// 0x03: MEDIUM ERROR
+				// 0x04: HARDWARE ERROR
+				// 0x05: ILLEGAL REQUEST
+				// 0x06: UNIT ATTENTION
+				// 0x07: DATA PROTECT
+				// 0x08: BLANK CHECK
+				// 0x09: VENDOR SPECIFIC
+				// 0x0A: COPY ABORTED
+				// 0x0B: ABORTED COMMAND
+				// 0x0D: VOLUME OVERFLOW
+				// 0x0E: MISCOMPARE
+		{0x0,0x0,
+		0x0,0x0},	// information
+		0x10,		// additional sense length
+		{0x0,0x0,
+		0x0,0x0},	// command specific information
+		0x00,		// additional sense code qualifier https://www.t10.org/lists/asc-num.htm
+		0x00,		// additional sense code qualifier https://www.t10.org/lists/asc-num.htm
+		0x00,		// field replacement unit code
+		0x00,		// sksv
+		{0x0,0x0,0x0}	// sense key specific
+	};
+
 	TUSBCDEventStatusReply m_EventStatusReply = {
 	    htons(0x06),   // Event data length
 	    0x02,           // Notification class (Media)
@@ -398,10 +440,15 @@ private:
         };
 
 	TUSBCDModeSense10Reply m_ModeSense10Reply {
-            htons(0x06),
+            htons(0x4a),	// Length
+            0x00,		// MediumType (0x00 = unknown)
+	    0x00,		// Device Specific Parameter
+            0x00,		// Long LBA
             0x00,
-	    0x00,
-	    {0x00,0x00,0x00,0x00}
+            0x0000,	// blockDescriptorLength
+            0x2a,		// Page
+            0x42,		// Page Length
+            {0x3, 0x0, 0x1, 0x03, 0x29, 0x3, 0xd, 0xc8, 0x1, 0x0, 0x2, 0xc0, 0xd, 0xc8, 0x0, 0x10, 0x10, 0x8a, 0x0, 0x0, 0x0, 0x1, 0x0, 0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0}
 	};
 
 	TUSBCDGetConfigurationReply m_GetConfigurationReply {
@@ -437,10 +484,13 @@ private:
 	int numTracks = 0;
 	//TUSBTOCData m_TOCData;
 
-	static const size_t MaxOutMessageSize = 2352;
-	static const size_t MaxInMessageSize = 2352;
-	DMA_BUFFER (u8, m_OutBuffer, MaxOutMessageSize);
+	static const size_t MaxInMessageSize = 37632; // 2352 sector * 16 blocks
+	static const size_t MaxOutMessageSize = 2048;
+	static const size_t MaxSectorSize = 2352;
+	u8* m_FileChunk = new (HEAP_LOW) u8[MaxInMessageSize];
+	//u8* m_OneSector = new (HEAP_LOW) u8[MaxSectorSize];
 	DMA_BUFFER (u8, m_InBuffer, MaxInMessageSize);
+	DMA_BUFFER (u8, m_OutBuffer, MaxOutMessageSize);
 
 	u32 m_nblock_address;
 	u32 m_nnumber_blocks;
@@ -448,13 +498,17 @@ private:
 	u32 m_nbyteCount;
 	boolean m_CDReady=false;
 
-	CUEParser cueParser;;
+	CUEParser cueParser;
 
 	u8 bmCSWStatus = 0;
 	u8 bSenseKey = 0;
         u8 bAddlSenseCode = 0;
+	u8 bAddlSenseCodeQual = 0;
+	int data_skip_bytes = 0;
+	int data_block_size = 2048;
 	int skip_bytes = 0;
 	int block_size = 2048;
+	int transfer_block_size = 2048;
 	int file_mode = 1;
 };
 
