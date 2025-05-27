@@ -1032,25 +1032,65 @@ void CUSBCDGadget::HandleSCSICommand()
 
 	case 0x42: // READ SUB-CHANNEL CMD
 		{
-			    MLOGNOTE("CUSBCDGadget::HandleSCSICommand", "READ SUB-CHANNEL CMD (0x42)");
 
-			    // Stub 16-byte fixed response (hex):
-			    static const uint8_t stubSubChannelResponse[16] = {
-				0x00, 0x15, 0x00, 0x0c, 0x01, 0x14, 0x01, 0x01,
-				0x00, 0x00, 0x0b, 0x16, 0x00, 0x00, 0x09, 0x16
-			    };
+			int allocationLength = (m_CBW.CBWCB[7] << 8) | m_CBW.CBWCB[8];
+			MLOGNOTE("CUSBCDGadget::HandleSCSICommand", "READ SUB-CHANNEL CMD (0x42), allocationLength = %d", allocationLength);
 
-			    // Copy stub data into IN buffer
-			    memcpy(m_InBuffer, stubSubChannelResponse, sizeof(stubSubChannelResponse));
+			static const uint8_t stubSubChannelResponse[] = {
+			    // Header (Bytes 0-3)
+			    0x00, 0x0A, // Data Length (0x0A = 10 bytes for Q-channel data)
+			    0x00,       // Reserved
+			    0x13,       // Audio Status: 0x13 = Audio play operation stopped
 
-			    m_pEP[EPIn]->BeginTransfer(CUSBCDGadgetEndpoint::TransferDataIn,
-						       m_InBuffer, sizeof(stubSubChannelResponse));
+			    // Q-Channel Data (Bytes 4-15, as described below)
+			    0x01,       // Current Track Number (BCD: 01)
+			    0x01,       // Current Index Number (BCD: 01)
+			    0x00,       // Absolute MSF (Minutes) (BCD: 00)
+			    0x00,       // Absolute MSF (Seconds) (BCD: 00)
+			    0x00,       // Absolute MSF (Frames)  (BCD: 00)
+			    0x00,       // Reserved (Control flags/ADR/etc. - usually 0 for audio)
+			    0x00,       // Track MSF (Minutes)    (BCD: 00)
+			    0x00,       // Track MSF (Seconds)    (BCD: 00)
+			    0x00,       // Track MSF (Frames)     (BCD: 00)
+			    0x00,       // Reserved (Q-channel CRC MSB)
+			    0x00,       // Reserved (Q-channel CRC LSB)
 
-			    m_nState=TCDState::DataIn;
-			    m_CSW.bmCSWStatus = bmCSWStatus;
+			    // Remainder of 96 bytes (Bytes 16-95) - typically all zeros if not used
+			    // These bytes are for P/R/S/T/U/V/W sub-channel data or reserved.
+			    // For a simple stub, zeroing them out is perfectly fine.
+			    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // ... and so on for 80 more bytes
+			    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+			};
 
-			    break;
-			}
+		    	int datalen = sizeof(stubSubChannelResponse);
+			if (allocationLength < datalen)
+				datalen = allocationLength;
+
+			// Copy stub data into IN buffer
+			memcpy(m_InBuffer, stubSubChannelResponse, datalen);
+
+			m_pEP[EPIn]->BeginTransfer(CUSBCDGadgetEndpoint::TransferDataIn,
+						       m_InBuffer, datalen);
+
+			m_nState=TCDState::DataIn;
+			m_CSW.bmCSWStatus = bmCSWStatus;
+
+			break;
+		}
 
 	case 0x4A: // GET EVENT STATUS NOTIFICATION
 		{
@@ -1208,17 +1248,54 @@ void CUSBCDGadget::HandleSCSICommand()
 			break;
 		}
 
-		/*
-		case 0x55: // Mode Select (10)
-			{
-				MLOGNOTE("CUSBCDGadget::HandleSCSICommand", "Mode Select (10)");
+	case 0x47: // PLAY AUDIO MSF
+		{
+			MLOGNOTE("CUSBCDGadget::HandleSCSICommand", "PLAY AUDIO MSF");
+		
+			//FIXME: implement
 
-				m_CSW.bmCSWStatus = bmCSWStatus;
-				m_ReqSenseReply.bSenseKey = bSenseKey;
-				m_ReqSenseReply.bAddlSenseCode = bAddlSenseCode;
-				break;
-			}
-		*/
+			m_CSW.bmCSWStatus = bmCSWStatus;
+			m_ReqSenseReply.bSenseKey = bSenseKey;
+			m_ReqSenseReply.bAddlSenseCode = bAddlSenseCode;
+			break;
+		}
+
+	case 0x48: // PLAY AUDIO TRACK/INDEX
+		{
+			MLOGNOTE("CUSBCDGadget::HandleSCSICommand", "PLAY AUDIO TRACK/INDEX");
+		
+			//FIXME: implement
+
+			m_CSW.bmCSWStatus = bmCSWStatus;
+			m_ReqSenseReply.bSenseKey = bSenseKey;
+			m_ReqSenseReply.bAddlSenseCode = bAddlSenseCode;
+			break;
+		}
+
+	case 0x4B: // PAUSE/RESUME
+		{
+			MLOGNOTE("CUSBCDGadget::HandleSCSICommand", "PAUSE/RESUME");
+		
+			//FIXME: implement
+
+			m_CSW.bmCSWStatus = bmCSWStatus;
+			m_ReqSenseReply.bSenseKey = bSenseKey;
+			m_ReqSenseReply.bAddlSenseCode = bAddlSenseCode;
+			break;
+		}
+
+	case 0x55: // Mode Select (10)
+		{
+			MLOGNOTE("CUSBCDGadget::HandleSCSICommand", "Mode Select (10)");
+		
+			//FIXME: implement
+
+			m_CSW.bmCSWStatus = bmCSWStatus;
+			m_ReqSenseReply.bSenseKey = bSenseKey;
+			m_ReqSenseReply.bAddlSenseCode = bAddlSenseCode;
+			break;
+		}
+
 	case 0x5a: // Mode Sense (10)
 		{
 			MLOGNOTE("CUSBCDGadget::HandleSCSICommand", "Mode Sense (10)");
