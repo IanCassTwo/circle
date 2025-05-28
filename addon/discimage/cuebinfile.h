@@ -23,7 +23,6 @@ class CCueBinFileDevice : public CDevice {
     u64 Seek(u64 ullOffset);
     u64 GetSize(void) const;
     const char* GetCueSheet() const;
-    static void LogWrite(TLogSeverity Severity, const char* pMessage, ...);
 
    private:
     FIL* m_pFile;
