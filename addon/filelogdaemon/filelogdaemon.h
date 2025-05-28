@@ -20,40 +20,39 @@
 #ifndef _circle_net_syslogdaemon_h
 #define _circle_net_syslogdaemon_h
 
-#include <circle/sched/task.h>
-#include <circle/sched/synchronizationevent.h>
 #include <circle/logger.h>
-#include <circle/timer.h>
+#include <circle/sched/synchronizationevent.h>
+#include <circle/sched/task.h>
 #include <circle/time.h>
+#include <circle/timer.h>
 #include <circle/types.h>
-#include <linux/kernel.h>
 #include <fatfs/ff.h>
+#include <linux/kernel.h>
 
-#define SYSLOG_VERSION		1
-#define SYSLOG_PORT		514
+#define SYSLOG_VERSION 1
+#define SYSLOG_PORT 514
 
-class CFileLogDaemon : public CTask
-{
-public:
-	CFileLogDaemon (const char *pLogFilePath);
-	~CFileLogDaemon (void);
-	boolean Initialize();
-	void Run (void);
+class CFileLogDaemon : public CTask {
+   public:
+    CFileLogDaemon(const char *pLogFilePath);
+    ~CFileLogDaemon(void);
+    boolean Initialize();
+    void Run(void);
 
-private:
-	boolean LogMessage (TLogSeverity Severity,
-			     time_t FullTime, unsigned nPartialTime, int nTimeNumOffset,
-			     const char *pAppName, const char *pMsg);
+   private:
+    boolean LogMessage(TLogSeverity Severity,
+                       time_t FullTime, unsigned nPartialTime, int nTimeNumOffset,
+                       const char *pAppName, const char *pMsg);
 
-	static void EventNotificationHandler (void);
-	static void PanicHandler (void);
+    static void EventNotificationHandler(void);
+    static void PanicHandler(void);
 
-private:
-	CSynchronizationEvent m_Event;
-	static CFileLogDaemon *s_pThis;
-	boolean m_bFileInitialized;
-	const char *m_pLogFilePath;
-	FIL m_LogFile;
+   private:
+    CSynchronizationEvent m_Event;
+    static CFileLogDaemon *s_pThis;
+    boolean m_bFileInitialized;
+    const char *m_pLogFilePath;
+    FIL m_LogFile;
 };
 
 #endif
