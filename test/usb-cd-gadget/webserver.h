@@ -20,50 +20,50 @@
 #ifndef _webserver_h
 #define _webserver_h
 
-#include <circle/usb/gadget/usbcdgadget.h>
-#include <circle/net/httpdaemon.h>
+#include <Properties/propertiesfatfsfile.h>
 #include <circle/actled.h>
+#include <circle/net/httpdaemon.h>
+#include <circle/usb/gadget/usbcdgadget.h>
+#include <discimage/cuebinfile.h>
 #include <fatfs/ff.h>
 #include <linux/kernel.h>
-#include <discimage/cuebinfile.h>
-#include <Properties/propertiesfatfsfile.h>
-#include "kernel.h" // Include kernel.h to have access to TShutdownMode
 
-class CWebServer : public CHTTPDaemon
-{
-public:
-    CWebServer (CNetSubSystem *pNetSubSystem, CUSBCDGadget *pCDGadget, CActLED *pActLED, CPropertiesFatFsFile *pProperties, CSocket *pSocket = 0);
-    ~CWebServer (void);
+#include "kernel.h"  // Include kernel.h to have access to TShutdownMode
+
+class CWebServer : public CHTTPDaemon {
+   public:
+    CWebServer(CNetSubSystem *pNetSubSystem, CUSBCDGadget *pCDGadget, CActLED *pActLED, CPropertiesFatFsFile *pProperties, CSocket *pSocket = 0);
+    ~CWebServer(void);
 
     // from CHTTPDaemon
-    CHTTPDaemon *CreateWorker (CNetSubSystem *pNetSubSystem, CSocket *pSocket);
-    
+    CHTTPDaemon *CreateWorker(CNetSubSystem *pNetSubSystem, CSocket *pSocket);
+
     // Get the shutdown mode (if any)
     TShutdownMode GetShutdownMode(void) const;
-    
+
     // Static method and variable for global shutdown state
     static void SetGlobalShutdownMode(TShutdownMode mode);
 
-private:
+   private:
     // from CHTTPDaemon
-    THTTPStatus GetContent (const char  *pPath,
-                          const char  *pParams,
-                          const char  *pFormData,
-                          u8          *pBuffer,
-                          unsigned    *pLength,
-                          const char **ppContentType);
+    THTTPStatus GetContent(const char *pPath,
+                           const char *pParams,
+                           const char *pFormData,
+                           u8 *pBuffer,
+                           unsigned *pLength,
+                           const char **ppContentType);
     THTTPStatus list_files_as_table(char *output_buffer, size_t max_len, const char *params = nullptr);
     THTTPStatus list_files_as_json(char *json_output, size_t max_len);
     THTTPStatus generate_mount_success_page(char *output_buffer, size_t max_len, const char *filename);
     THTTPStatus handle_system_operation(char *output_buffer, size_t max_len, const char *action, TShutdownMode *pShutdownMode);
-    
-private:
+
+   private:
     CActLED *m_pActLED;
     CUSBCDGadget *m_pCDGadget;
-    u8 *m_pContentBuffer;    // Added content buffer as class member
+    u8 *m_pContentBuffer;  // Added content buffer as class member
     CPropertiesFatFsFile *m_pProperties;
     TShutdownMode m_ShutdownMode;
-    
+
     // Static shutdown mode that is shared across all instances
     static TShutdownMode s_GlobalShutdownMode;
 };

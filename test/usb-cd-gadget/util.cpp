@@ -2,7 +2,7 @@
 #include "util.h"
 
 LOGMODULE("util");
-		   //
+
 char tolower(char c) {
     if (c >= 'A' && c <= 'Z')
         return c + ('a' - 'A');
@@ -45,9 +45,8 @@ bool hasIsoExtension(const char* imageName) {
     return false;
 }
 
-void change_extension_to_bin(char *fullPath) {
+void change_extension_to_bin(char* fullPath) {
     size_t len = strlen(fullPath);
-    //if (len >= 3 && strcmp(fullPath + len - 3, "bin") == 0) {
     if (len >= 3) {
         fullPath[len - 3] = 'b';
         fullPath[len - 2] = 'i';
@@ -55,9 +54,8 @@ void change_extension_to_bin(char *fullPath) {
     }
 }
 
-void change_extension_to_cue(char *fullPath) {
+void change_extension_to_cue(char* fullPath) {
     size_t len = strlen(fullPath);
-    //if (len >= 3 && strcmp(fullPath + len - 3, "iso") == 0) {
     if (len >= 3) {
         fullPath[len - 3] = 'c';
         fullPath[len - 2] = 'u';
@@ -66,7 +64,7 @@ void change_extension_to_cue(char *fullPath) {
 }
 
 bool ReadFileToString(const char* fullPath, char** out_str) {
-    if (!out_str) return false; // safeguard
+    if (!out_str) return false;  // safeguard
 
     FIL* file = new FIL();
     FRESULT result = f_open(file, fullPath, FA_READ);
@@ -94,15 +92,14 @@ bool ReadFileToString(const char* fullPath, char** out_str) {
         return false;
     }
 
-    buffer[file_size] = '\0'; // null-terminate
+    buffer[file_size] = '\0';  // null-terminate
     *out_str = buffer;
     return true;
 }
 
 CCueBinFileDevice* loadCueBinFileDevice(const char* imageName) {
-
     // Construct full path
-    char fullPath[255]; //FIXME limits
+    char fullPath[255];  // FIXME limits
     snprintf(fullPath, sizeof(fullPath), "SD:/images/%s", imageName);
 
     FIL* imageFile = new FIL();
@@ -110,48 +107,48 @@ CCueBinFileDevice* loadCueBinFileDevice(const char* imageName) {
 
     // Is this a bin?
     if (hasBinExtension(fullPath)) {
-	LOGNOTE("This is a bin file, changing to cue");
-	change_extension_to_cue(fullPath);
+        LOGNOTE("This is a bin file, changing to cue");
+        change_extension_to_cue(fullPath);
     }
 
     // Is this a cue?
     if (hasCueExtension(fullPath)) {
-	// Load the cue
-	LOGNOTE("This is a cue file, loading cue");
-	if (!ReadFileToString(fullPath, &cue_str)) {
-	    return nullptr;
-	}
-	LOGNOTE("Loaded cue %s", cue_str);
+        // Load the cue
+        LOGNOTE("This is a cue file, loading cue");
+        if (!ReadFileToString(fullPath, &cue_str)) {
+            return nullptr;
+        }
+        LOGNOTE("Loaded cue %s", cue_str);
 
-	// Load a bin file with the same name
-	change_extension_to_bin(fullPath);
-	LOGNOTE("Changed to bin %s", fullPath);
+        // Load a bin file with the same name
+        change_extension_to_bin(fullPath);
+        LOGNOTE("Changed to bin %s", fullPath);
     }
-   
+
     // Load the image
     LOGNOTE("Opening image file %s", fullPath);
     FRESULT Result = f_open(imageFile, fullPath, FA_READ);
     if (Result != FR_OK) {
-	LOGERR("Cannot open image file for reading");
-	delete imageFile;
-	return nullptr;
+        LOGERR("Cannot open image file for reading");
+        delete imageFile;
+        return nullptr;
     }
 
     LOGNOTE("Opened image file %s", fullPath);
-        
+
     // Create our device
     CCueBinFileDevice* ccueBinFileDevice = new CCueBinFileDevice(imageFile, cue_str);
 
     // Cleanup
     if (cue_str != nullptr)
-    	delete[] cue_str;
+        delete[] cue_str;
 
     return ccueBinFileDevice;
 }
 
 // Check if a character is a hexadecimal digit (0-9, A-F, a-f)
 bool is_hex_digit(char c) {
-    return (c >= '0' && c <= '9') || 
+    return (c >= '0' && c <= '9') ||
            (c >= 'A' && c <= 'F') ||
            (c >= 'a' && c <= 'f');
 }
@@ -160,27 +157,30 @@ bool is_hex_digit(char c) {
 void urldecode(char* dst, const char* src) {
     char a, b;
     while (*src) {
-        if ((*src == '%') && ((a = src[1]) && (b = src[2])) && 
+        if ((*src == '%') && ((a = src[1]) && (b = src[2])) &&
             (is_hex_digit(a) && is_hex_digit(b))) {
-            if (a >= 'a') a -= ('a' - 10);
-            else if (a >= 'A') a -= ('A' - 10);
-            else a -= '0';
-            
-            if (b >= 'a') b -= ('a' - 10);
-            else if (b >= 'A') b -= ('A' - 10);
-            else b -= '0';
-            
+            if (a >= 'a')
+                a -= ('a' - 10);
+            else if (a >= 'A')
+                a -= ('A' - 10);
+            else
+                a -= '0';
+
+            if (b >= 'a')
+                b -= ('a' - 10);
+            else if (b >= 'A')
+                b -= ('A' - 10);
+            else
+                b -= '0';
+
             *dst++ = 16 * a + b;
             src += 3;
-        } 
-        else if (*src == '+') {
+        } else if (*src == '+') {
             *dst++ = ' ';
             src++;
-        }
-        else {
+        } else {
             *dst++ = *src++;
         }
     }
     *dst = '\0';
 }
-

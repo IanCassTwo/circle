@@ -26,22 +26,21 @@
 #include <circle/net/socket.h>
 #include <circle/sched/task.h>
 
-class CFTPDaemon : protected CTask
-{
-public:
-	CFTPDaemon(const char* pUser, const char* pPassword);
-	virtual ~CFTPDaemon() override;
+class CFTPDaemon : protected CTask {
+   public:
+    CFTPDaemon(const char* pUser, const char* pPassword);
+    virtual ~CFTPDaemon() override;
 
-	bool Initialize();
+    bool Initialize();
 
-	virtual void Run() override;
+    virtual void Run() override;
 
-private:
-	// TCP sockets
-	CSocket* m_pListenSocket;
+   private:
+    // TCP sockets
+    CSocket* m_pListenSocket;
 
-	const char* m_pUser;
-	const char* m_pPassword;
+    const char* m_pUser;
+    const char* m_pPassword;
 };
 
 #endif

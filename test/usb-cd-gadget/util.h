@@ -4,7 +4,7 @@
 #include <circle/util.h>
 #include <discimage/cuebinfile.h>
 
-#define MAX_FILENAME    255
+#define MAX_FILENAME 255
 
 char tolower(char c);
 bool hasBinExtension(const char* imageName);
@@ -13,4 +13,4 @@ CCueBinFileDevice* loadCueBinFileDevice(const char* imageName);
 bool is_hex_digit(char c);
 void urldecode(char* dst, const char* src);
 
-#endif // UTIL_H
+#endif  // UTIL_H

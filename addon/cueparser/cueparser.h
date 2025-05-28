@@ -24,15 +24,14 @@
 
 #pragma once
 
-#include <stdint.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #ifndef CUE_MAX_FILENAME
 #define CUE_MAX_FILENAME 256
 #endif
 
-enum CUEFileMode
-{
+enum CUEFileMode {
     CUEFile_BINARY = 0,
     CUEFile_MOTOROLA,
     CUEFile_MP3,
@@ -40,8 +39,7 @@ enum CUEFileMode
     CUEFile_AIFF,
 };
 
-enum CUETrackMode
-{
+enum CUETrackMode {
     CUETrack_AUDIO = 0,
     CUETrack_CDG,
     CUETrack_MODE1_2048,
@@ -54,13 +52,12 @@ enum CUETrackMode
     CUETrack_CDI_2352,
 };
 
-struct CUETrackInfo
-{
+struct CUETrackInfo {
     // Source file name and file type, and offset to start of track data in bytes.
-    char filename[CUE_MAX_FILENAME+1];
+    char filename[CUE_MAX_FILENAME + 1];
     int file_index;
     CUEFileMode file_mode;
-    uint64_t file_offset; // corresponds to data_start below
+    uint64_t file_offset;  // corresponds to data_start below
 
     // Track number and mode in CD format
     int track_number;
@@ -88,9 +85,8 @@ struct CUETrackInfo
     uint32_t track_start;
 };
 
-class CUEParser
-{
-public:
+class CUEParser {
+   public:
     CUEParser();
 
     // Initialize the class to parse data from string.
@@ -111,7 +107,7 @@ public:
     // lengths when the .cue file references multiple .bin files.
     const CUETrackInfo *next_track(uint64_t prev_file_size);
 
-protected:
+   protected:
     const char *m_cue_sheet;
     const char *m_parse_pos;
     CUETrackInfo m_track_info;
@@ -143,5 +139,5 @@ protected:
     uint32_t get_sector_length(CUEFileMode filemode, CUETrackMode trackmode);
 
     // Remove './' or '.\' from the beginning of the filename as it is not recogized by the SDFat library
-    void remove_dot_slash(char* filename, size_t length);
+    void remove_dot_slash(char *filename, size_t length);
 };

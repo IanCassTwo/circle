@@ -29,130 +29,126 @@
 #include <circle/string.h>
 
 // TODO: These may be incomplete/inaccurate
-enum TFTPStatus
-{
-	FileStatusOk		= 150,
+enum TFTPStatus {
+    FileStatusOk = 150,
 
-	Success			= 200,
-	SystemType		= 215,
-	ReadyForNewUser		= 220,
-	ClosingControl		= 221,
-	TransferComplete	= 226,
-	EnteringPassiveMode	= 227,
-	UserLoggedIn		= 230,
-	FileActionOk		= 250,
-	PathCreated		= 257,
+    Success = 200,
+    SystemType = 215,
+    ReadyForNewUser = 220,
+    ClosingControl = 221,
+    TransferComplete = 226,
+    EnteringPassiveMode = 227,
+    UserLoggedIn = 230,
+    FileActionOk = 250,
+    PathCreated = 257,
 
-	PasswordRequired	= 331,
-	AccountRequired		= 332,
-	PendingFurtherInfo	= 350,
+    PasswordRequired = 331,
+    AccountRequired = 332,
+    PendingFurtherInfo = 350,
 
-	ServiceNotAvailable	= 421,
-	DataConnectionFailed	= 425,
-	FileActionNotTaken	= 450,
-	ActionAborted		= 451,
+    ServiceNotAvailable = 421,
+    DataConnectionFailed = 425,
+    FileActionNotTaken = 450,
+    ActionAborted = 451,
 
-	CommandUnrecognized	= 500,
-	SyntaxError		= 501,
-	CommandNotImplemented	= 502,
-	BadCommandSequence	= 503,
-	NotLoggedIn		= 530,
-	FileNotFound		= 550,
-	FileNameNotAllowed	= 553,
+    CommandUnrecognized = 500,
+    SyntaxError = 501,
+    CommandNotImplemented = 502,
+    BadCommandSequence = 503,
+    NotLoggedIn = 530,
+    FileNotFound = 550,
+    FileNameNotAllowed = 553,
 };
 
-enum class TTransferMode
-{
-	Active,
-	Passive,
+enum class TTransferMode {
+    Active,
+    Passive,
 };
 
-enum class TDataType
-{
-	ASCII,
-	Binary,
+enum class TDataType {
+    ASCII,
+    Binary,
 };
 
 struct TFTPCommand;
 struct TDirectoryListEntry;
 
-class CFTPWorker : protected CTask
-{
-public:
-	CFTPWorker(CSocket* pControlSocket, const char* pExpectedUser, const char* pExpectedPassword);
-	virtual ~CFTPWorker() override;
+class CFTPWorker : protected CTask {
+   public:
+    CFTPWorker(CSocket* pControlSocket, const char* pExpectedUser, const char* pExpectedPassword);
+    virtual ~CFTPWorker() override;
 
-	virtual void Run() override;
+    virtual void Run() override;
 
-	static u8 GetInstanceCount() { return s_nInstanceCount; }
+    static u8 GetInstanceCount() { return s_nInstanceCount; }
 
-private:
-	CSocket* OpenDataConnection();
+   private:
+    CSocket* OpenDataConnection();
 
-	bool SendStatus(TFTPStatus StatusCode, const char* pMessage);
+    bool SendStatus(TFTPStatus StatusCode, const char* pMessage);
 
-	bool CheckLoggedIn();
+    bool CheckLoggedIn();
 
-	// Directory navigation
-	CString RealPath(const char* pInBuffer) const;
-	const TDirectoryListEntry* BuildDirectoryList(size_t& nOutEntries) const;
+    // Directory navigation
+    CString RealPath(const char* pInBuffer) const;
+    const TDirectoryListEntry* BuildDirectoryList(size_t& nOutEntries) const;
 
-	// FTP command handlers
-	bool System(const char* pArgs);
-	bool Username(const char* pArgs);
-	bool Port(const char* pArgs);
-	bool Passive(const char* pArgs);
-	bool Password(const char* pArgs);
-	bool Type(const char* pArgs);
-	bool Retrieve(const char* pArgs);
-	bool Store(const char* pArgs);
-	bool Delete(const char* pArgs);
-	bool MakeDirectory(const char* pArgs);
-	bool ChangeWorkingDirectory(const char* pArgs);
-	bool ChangeToParentDirectory(const char* pArgs);
-	bool PrintWorkingDirectory(const char* pArgs);
-	bool List(const char* pArgs);
-	bool ListFileNames(const char* pArgs);
-	bool RenameFrom(const char* pArgs);
-	bool RenameTo(const char* pArgs);
-	bool Bye(const char* pArgs);
-	bool NoOp(const char* pArgs);
+    // FTP command handlers
+    bool System(const char* pArgs);
+    bool Username(const char* pArgs);
+    bool Port(const char* pArgs);
+    bool Passive(const char* pArgs);
+    bool Password(const char* pArgs);
+    bool Type(const char* pArgs);
+    bool Retrieve(const char* pArgs);
+    bool Store(const char* pArgs);
+    bool Delete(const char* pArgs);
+    bool MakeDirectory(const char* pArgs);
+    bool ChangeWorkingDirectory(const char* pArgs);
+    bool ChangeToParentDirectory(const char* pArgs);
+    bool PrintWorkingDirectory(const char* pArgs);
+    bool List(const char* pArgs);
+    bool ListFileNames(const char* pArgs);
+    bool RenameFrom(const char* pArgs);
+    bool RenameTo(const char* pArgs);
+    bool Bye(const char* pArgs);
+    bool NoOp(const char* pArgs);
 
-	CString m_LogName;
+    CString m_LogName;
 
-	// Authentication
-	const char* m_pExpectedUser;
-	const char* m_pExpectedPassword;
+    // Authentication
+    const char* m_pExpectedUser;
+    const char* m_pExpectedPassword;
 
-	// TCP sockets
-	CSocket* m_pControlSocket;
-	CSocket* m_pDataSocket;
-	u16 m_nDataSocketPort;
-	CIPAddress m_DataSocketIPAddress;
+    // TCP sockets
+    CSocket* m_pControlSocket;
+    CSocket* m_pDataSocket;
+    u16 m_nDataSocketPort;
+    CIPAddress m_DataSocketIPAddress;
 
-	// Command/data buffers
-	char m_CommandBuffer[FRAME_BUFFER_SIZE];
-	//u8 m_DataBuffer[FRAME_BUFFER_SIZE];
-	u8 m_DataBuffer[2048];
+    // Command/data buffers
+    char m_CommandBuffer[FRAME_BUFFER_SIZE];
+    // u8 m_DataBuffer[FRAME_BUFFER_SIZE];
+    u8 m_DataBuffer[2048];
 
-	// Session state
-	CString m_User;
-	CString m_Password;
-	TDataType m_DataType;
-	TTransferMode m_TransferMode;
-	CString m_CurrentPath;
-	CString m_RenameFrom;
+    // Session state
+    CString m_User;
+    CString m_Password;
+    TDataType m_DataType;
+    TTransferMode m_TransferMode;
+    CString m_CurrentPath;
+    CString m_RenameFrom;
 
-	static void FatFsPathToFTPPath(const char* pInBuffer, char* pOutBuffer, size_t nSize);
-	static void FTPPathToFatFsPath(const char* pInBuffer, char* pOutBuffer, size_t nSize);
+    static void FatFsPathToFTPPath(const char* pInBuffer, char* pOutBuffer, size_t nSize);
+    static void FTPPathToFatFsPath(const char* pInBuffer, char* pOutBuffer, size_t nSize);
 
-	static void FatFsParentPath(const char* pInBuffer, char* pOutBuffer, size_t nSize);
+    static void FatFsParentPath(const char* pInBuffer, char* pOutBuffer, size_t nSize);
 
-	static void FormatLastModifiedDate(u16 nDate, char* pOutBuffer, size_t nSize);
-	static void FormatLastModifiedTime(u16 nDate, char* pOutBuffer, size_t nSize);
+    static void FormatLastModifiedDate(u16 nDate, char* pOutBuffer, size_t nSize);
+    static void FormatLastModifiedTime(u16 nDate, char* pOutBuffer, size_t nSize);
 
-	static const TFTPCommand Commands[];
-	static u8 s_nInstanceCount;
+    static const TFTPCommand Commands[];
+    static u8 s_nInstanceCount;
 };
 
 #endif

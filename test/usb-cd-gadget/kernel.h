@@ -3,7 +3,7 @@
 //
 // Circle - A C++ bare metal environment for Raspberry Pi
 // Copyright (C) 2023-2024  R. Stange <rsta2@o2online.de>
-// 
+//
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
@@ -20,65 +20,63 @@
 #ifndef _kernel_h
 #define _kernel_h
 
+#include <Properties/propertiesfatfsfile.h>
+#include <SDCard/emmc.h>
 #include <circle/actled.h>
-#include <circle/koptions.h>
 #include <circle/devicenameservice.h>
-#include <circle/screen.h>
-#include <circle/serial.h>
 #include <circle/exceptionhandler.h>
 #include <circle/interrupt.h>
-#include <circle/timer.h>
+#include <circle/koptions.h>
 #include <circle/logger.h>
-#include <circle/usb/gadget/usbcdgadget.h>
-#include <SDCard/emmc.h>
-#include <fatfs/ff.h>
-#include <circle/types.h>
-#include <discimage/cuebinfile.h>
-#include <wlan/bcm4343.h>
-#include <wlan/hostap/wpa_supplicant/wpasupplicant.h>
+#include <circle/net/mdnspublisher.h>
 #include <circle/net/netsubsystem.h>
 #include <circle/sched/scheduler.h>
-#include <circle/net/mdnspublisher.h>
+#include <circle/screen.h>
+#include <circle/serial.h>
+#include <circle/timer.h>
+#include <circle/types.h>
+#include <circle/usb/gadget/usbcdgadget.h>
+#include <discimage/cuebinfile.h>
+#include <fatfs/ff.h>
 #include <filelogdaemon/filelogdaemon.h>
-#include <Properties/propertiesfatfsfile.h>
+#include <wlan/bcm4343.h>
+#include <wlan/hostap/wpa_supplicant/wpasupplicant.h>
 
-enum TShutdownMode
-{
-	ShutdownNone,
-	ShutdownHalt,
-	ShutdownReboot
+enum TShutdownMode {
+    ShutdownNone,
+    ShutdownHalt,
+    ShutdownReboot
 };
 
-class CKernel
-{
-public:
-	CKernel (void);
-	~CKernel (void);
+class CKernel {
+   public:
+    CKernel(void);
+    ~CKernel(void);
 
-	boolean Initialize (void);
-	boolean SetDevice(char *imageName);
+    boolean Initialize(void);
+    boolean SetDevice(char *imageName);
 
-	TShutdownMode Run (void);
+    TShutdownMode Run(void);
 
-private:
-	// do not change this order
-	CActLED			m_ActLED;
-	CKernelOptions		m_Options;
-	CDeviceNameService	m_DeviceNameService;
-	CScreenDevice		m_Screen;
-	CSerialDevice		m_Serial;
-	CExceptionHandler	m_ExceptionHandler;
-	CInterruptSystem	m_Interrupt;
-	CTimer			m_Timer;
-	CLogger			m_Logger;
-	CScheduler              m_Scheduler;
+   private:
+    // do not change this order
+    CActLED m_ActLED;
+    CKernelOptions m_Options;
+    CDeviceNameService m_DeviceNameService;
+    CScreenDevice m_Screen;
+    CSerialDevice m_Serial;
+    CExceptionHandler m_ExceptionHandler;
+    CInterruptSystem m_Interrupt;
+    CTimer m_Timer;
+    CLogger m_Logger;
+    CScheduler m_Scheduler;
 
-	CEMMCDevice		m_EMMC;
-	FATFS                   m_FileSystem;
-	CBcm4343Device          m_WLAN;
-        CNetSubSystem           m_Net;
-        CWPASupplicant          m_WPASupplicant;
-	CUSBCDGadget		m_CDGadget;
+    CEMMCDevice m_EMMC;
+    FATFS m_FileSystem;
+    CBcm4343Device m_WLAN;
+    CNetSubSystem m_Net;
+    CWPASupplicant m_WPASupplicant;
+    CUSBCDGadget m_CDGadget;
 };
 
 #endif
